@@ -1,0 +1,11 @@
+{
+  "version": "gbpusd-ensemble-v1.0",
+  "model_type": "Multi-Model Ensemble (XGBoost + LightGBM + CatBoost)",
+  "training_samples": 3941,
+  "validation_samples": 841,
+  "test_samples": 845,
+  "features_engineered": 130,
+  "has_vwap": true,
+  "has_candlestick_patterns": true,
+  "created_at": "2026-09-09T17:12:10.193112+00:00"
+}

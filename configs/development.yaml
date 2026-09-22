@@ -1,0 +1,32 @@
+symbol: GBPUSD
+timeframe: M15
+demo_mode: true
+
+prediction:
+  horizon_bars: 4
+  min_confidence: 0.58
+  min_margin: 0.15
+
+label:
+  upper_atr: 1.5
+  lower_atr: 1.0
+  horizon_bars: 4
+
+risk:
+  sl_atr: 1.0
+  tp_atr: 1.8
+
+news:
+  normal_window_minutes: 15
+  major_window_minutes: 30
+
+regime:
+  high_vol_percentile: 90
+  illiquid_volume_percentile: 10
+  trending_adx: 25.0
+
+backtest:
+  initial_capital: 10000.0
+  fixed_spread_pips: 0.8
+  slippage_pips: 0.2
+  execution_delay_ms: 50
