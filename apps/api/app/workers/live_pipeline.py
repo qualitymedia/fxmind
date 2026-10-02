@@ -22,6 +22,9 @@ from ml.data.providers.base import Candle
 from ml.data.storage import ParquetStorage
 from ml.inference.service import InferenceService
 from apps.api.app.websocket.manager import ws_manager
+from apps.api.app.db.database import get_session_factory
+from apps.api.app.services.signal_service import save_signal_to_db
+from apps.api.app.services.paper_trading import paper_trading_engine
 
 
 class LivePipelineWorker:
@@ -34,6 +37,7 @@ class LivePipelineWorker:
         self.inference_service = InferenceService()
         self.is_running = False
         self.last_processed_timestamp: Optional[datetime] = None
+        self.session_factory = get_session_factory()
 
     async def start(self) -> None:
         """Start the background live analysis loop."""
@@ -59,6 +63,7 @@ class LivePipelineWorker:
 
         # 1. Fetch latest live quote
         quote = await self.provider.get_latest_quote("GBPUSD")
+        current_price = (quote.bid + quote.ask) / 2.0
         
         # Broadcast real-time quote over WebSocket
         await ws_manager.broadcast(
@@ -72,6 +77,15 @@ class LivePipelineWorker:
                 "timestamp": quote.timestamp.isoformat(),
             },
         )
+
+        # 2. Check and evaluate any open paper positions against current tick
+        async with self.session_factory() as session:
+            await paper_trading_engine.check_and_close_positions(
+                current_price=current_price,
+                high=quote.ask,
+                low=quote.bid,
+                db=session,
+            )
 
         # Periodically refresh M15 candles if needed
         m15_df = self.storage.load_candles_df("GBPUSD", "M15")
@@ -107,7 +121,22 @@ class LivePipelineWorker:
             spread_pips=quote.spread,
         )
 
-        # 4. Broadcast live signal over WebSocket
+        # 4. Save Signal to SQLite DB & Open Paper Trade if ACTIVE
+        db_signal_id = None
+        async with self.session_factory() as session:
+            try:
+                saved_signal = await save_signal_to_db(analysis_result, session)
+                db_signal_id = saved_signal.id
+                analysis_result["id"] = db_signal_id
+                print(f"[LIVE WORKER] Signal saved to DB with ID={db_signal_id}")
+            except Exception as e:
+                print(f"[LIVE WORKER] Signal DB persistence error: {e}")
+
+        # Open simulated paper trade if signal is ACTIVE
+        if analysis_result.get("trade", {}).get("status") == "ACTIVE":
+            paper_trading_engine.open_trade(analysis_result, db_signal_id=db_signal_id)
+
+        # 5. Broadcast live signal over WebSocket
         await ws_manager.broadcast(
             "signals",
             {

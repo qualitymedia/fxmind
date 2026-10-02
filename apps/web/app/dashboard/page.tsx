@@ -9,6 +9,8 @@ import { AIBiasCard } from "@/components/dashboard/ai-bias-card";
 import { RegimeCard } from "@/components/dashboard/regime-card";
 import { SignalCard } from "@/components/dashboard/signal-card";
 import { SetupQualityCard } from "@/components/dashboard/setup-quality-card";
+import { VolumeProfileCard } from "@/components/dashboard/volume-profile-card";
+import { PaperPortfolioCard } from "@/components/dashboard/paper-portfolio-card";
 import { MainChart } from "@/features/market/chart";
 import { AIMetricsSidebar } from "@/components/dashboard/ai-metrics-sidebar";
 import { TradeOfTheDayCard } from "@/components/dashboard/trade-of-the-day-card";
@@ -27,11 +29,23 @@ import {
 
 export default function DashboardPage() {
   const [timeframe, setTimeframe] = useState("M15");
-  const { analysis, candles, signals, loading, error, lastRefresh, refetch } =
-    useDashboardData(timeframe);
+  const {
+    analysis,
+    candles,
+    signals,
+    volumeProfile,
+    paperSummary,
+    paperPositions,
+    tradeHistory,
+    loading,
+    error,
+    lastRefresh,
+    refetch,
+  } = useDashboardData(timeframe);
 
   const signal = analysis?.signal ?? null;
   const market = analysis?.market ?? null;
+
 
   const isWeekendClosed =
     signal?.market?.session === "WEEKEND_CLOSED" ||
@@ -50,7 +64,7 @@ export default function DashboardPage() {
   const quickLinks = [
     { label: "Recent Signals", href: "/signals", icon: Zap, count: signals?.length ?? 0 },
     { label: "Performance", href: "/performance", icon: BarChart3 },
-    { label: "AI Processing Logs", href: "/logs", icon: Terminal, badge: "LIVE" },
+    { label: "Activity Audit", href: "/logs", icon: Terminal, badge: "LIVE" },
   ];
 
   return (
@@ -93,11 +107,9 @@ export default function DashboardPage() {
               </span>
             )}
           </div>
-          {signal?.model_version && (
-            <span className="font-mono text-text-secondary">
-              Model: {signal.model_version}
-            </span>
-          )}
+          <span className="font-mono text-text-secondary text-[11px]">
+            Engine: FXMind Alpha v2
+          </span>
         </div>
 
         {/* Banners */}
@@ -149,6 +161,7 @@ export default function DashboardPage() {
             <SignalCard
               direction={(signal?.trade?.direction as any) ?? null}
               status={signal?.trade?.status ?? "NO_TRADE"}
+              strategyType={(signal?.trade as any)?.strategy_type ?? null}
             />
             {/* Trade of the Day Swapped into the Top KPI Grid */}
             <TradeOfTheDayCard
@@ -162,7 +175,7 @@ export default function DashboardPage() {
               takeProfit={signal?.trade?.take_profit}
               riskReward={signal?.trade?.risk_reward}
               session={market?.session ?? "ASIAN"}
-              currentPrice={market?.current_price ?? (candles.length > 0 ? candles[candles.length - 1].close : 1.3513)}
+              currentPrice={market?.current_price ?? (candles.length > 0 ? candles[candles.length - 1].close : undefined)}
             />
           </div>
 
@@ -186,6 +199,15 @@ export default function DashboardPage() {
                       }
                     : undefined
                 }
+                volumeProfile={
+                  volumeProfile
+                    ? {
+                        poc: volumeProfile.poc,
+                        vah: volumeProfile.vah,
+                        val: volumeProfile.val,
+                      }
+                    : undefined
+                }
               />
             </div>
 
@@ -202,12 +224,12 @@ export default function DashboardPage() {
                 patterns={signal?.patterns ?? []}
                 reasons={signal?.reasons ?? []}
                 tradeStatus={signal?.trade?.status ?? "NO_TRADE"}
-                direction={signal?.trade?.direction}
-                entryLow={signal?.trade?.entry_low}
-                entryHigh={signal?.trade?.entry_high}
-                stopLoss={signal?.trade?.stop_loss}
-                takeProfit={signal?.trade?.take_profit}
-                riskReward={signal?.trade?.risk_reward}
+                direction={signal?.trade?.direction ?? undefined}
+                entryLow={signal?.trade?.entry_low ?? undefined}
+                entryHigh={signal?.trade?.entry_high ?? undefined}
+                stopLoss={signal?.trade?.stop_loss ?? undefined}
+                takeProfit={signal?.trade?.take_profit ?? undefined}
+                riskReward={signal?.trade?.risk_reward ?? undefined}
               />
 
               {/* Setup Quality Swapped into Right Column (Directly Below AI Insight) */}
@@ -216,16 +238,30 @@ export default function DashboardPage() {
                   signal?.trade?.status === "ACTIVE" ? quality : "Key Watch Levels"
                 }
                 riskReward={signal?.trade?.risk_reward ?? null}
-                entryLow={signal?.trade?.entry_low}
-                entryHigh={signal?.trade?.entry_high}
-                stopLoss={signal?.trade?.stop_loss}
-                takeProfit={signal?.trade?.take_profit}
+                entryLow={signal?.trade?.entry_low ?? undefined}
+                entryHigh={signal?.trade?.entry_high ?? undefined}
+                stopLoss={signal?.trade?.stop_loss ?? undefined}
+                takeProfit={signal?.trade?.take_profit ?? undefined}
               />
             </div>
           </div>
 
-          {/* 4. Quick Links */}
+          {/* 4. Institutional Analytics & Live Execution Row */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <VolumeProfileCard
+              volumeProfile={volumeProfile}
+              currentPrice={market?.current_price}
+            />
+            <PaperPortfolioCard
+              paperSummary={paperSummary}
+              paperPositions={paperPositions}
+              tradeHistory={tradeHistory}
+            />
+          </div>
+
+          {/* 5. Quick Links */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+
             {quickLinks.map((link) => {
               const Icon = link.icon;
               return (

@@ -31,3 +31,10 @@ async def get_market_candles(
     """Get historical candles for chart rendering."""
     data = await market_service.get_candles(symbol.upper(), timeframe, limit)
     return [CandleResponse(**c) for c in data]
+
+
+@router.get("/{symbol}/volume-profile")
+async def get_volume_profile(symbol: str = "GBPUSD") -> dict:
+    """Get rolling 24h Volume Profile, Point of Control (POC), and Value Area (VAH/VAL)."""
+    return await market_service.get_volume_profile(symbol.upper())
+

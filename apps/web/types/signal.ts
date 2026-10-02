@@ -52,6 +52,14 @@ export interface Signal {
   outcome?: string;
 }
 
+export interface CrossMarketItem {
+  symbol: string;
+  current_value: number;
+  change_percent: number;
+  bias: string;
+  correlation_note: string;
+}
+
 export interface AnalysisResponse {
   signal: Signal;
   market: any;

@@ -29,7 +29,7 @@ function TradingViewWidgetComponent({
         title="TradingView Live Stream Chart"
         src={iframeSrc}
         className="w-full h-full border-0"
-        allowTransparency={true}
+        
         scrolling="no"
       />
     </div>

@@ -26,15 +26,11 @@ interface FinancialChartProps {
     takeProfit?: number;
     isWatchLevel?: boolean;
   };
-}
-
-// Compute EMA from an array of close prices
-function ema(prices: number[], period: number): number | null {
-  if (prices.length < period) return null;
-  const k = 2 / (period + 1);
-  let val = prices[0];
-  for (let i = 1; i < prices.length; i++) val = prices[i] * k + val * (1 - k);
-  return val;
+  volumeProfile?: {
+    poc?: number;
+    vah?: number;
+    val?: number;
+  };
 }
 
 export function MainChart({
@@ -43,6 +39,7 @@ export function MainChart({
   showIndicators = true,
   showAILayers = true,
   tradeSetup,
+  volumeProfile,
 }: FinancialChartProps) {
   const [chartMode, setChartMode] = useState<"tradingview" | "ai_overlay">("tradingview");
   const chartContainerRef = useRef<HTMLDivElement>(null);
@@ -51,7 +48,6 @@ export function MainChart({
   const liveTickTimer = useRef<ReturnType<typeof setInterval> | null>(null);
   const lastCandleTimeRef = useRef<number | null>(null);
 
-  const closes = candles.map((c) => c.close);
   const lastVol = candles.length > 0 ? candles[candles.length - 1].tick_volume : null;
 
   // --- Live tick updater ---
@@ -64,12 +60,6 @@ export function MainChart({
         const livePrice = overview.current_price;
 
         if (!candleSeriesRef.current || !lastCandleTimeRef.current) return;
-
-        const tfSeconds: Record<string, number> = { M15: 900, "30m": 1800, H1: 3600 };
-        const tfSec = tfSeconds[timeframe] ?? 900;
-
-        const nowSec = Math.floor(Date.now() / 1000);
-        const currentCandleTime = Math.floor(nowSec / tfSec) * tfSec;
 
         if (candles.length > 0) {
           const lastC = candles[candles.length - 1];
@@ -85,11 +75,11 @@ export function MainChart({
         // Silently ignore live tick errors
       }
     }, 15_000);
-  }, [candles, timeframe]);
+  }, [candles]);
 
   // --- Single effect: create chart + load data + draw price lines ---
   useEffect(() => {
-    if (!chartContainerRef.current) return;
+    if (!chartContainerRef.current || chartMode !== "ai_overlay") return;
 
     if (chartRef.current) {
       chartRef.current.remove();
@@ -111,13 +101,16 @@ export function MainChart({
         vertLine: { color: "#475569", style: 2 },
         horzLine: { color: "#475569", style: 2 },
       },
-      rightPriceScale: { borderColor: "#1E293B" },
+      rightPriceScale: {
+        borderColor: "#1E293B",
+        autoScale: true,
+      },
       timeScale: {
         borderColor: "#1E293B",
         timeVisible: true,
         secondsVisible: false,
       },
-      height: 420,
+      height: 440,
     });
 
     chartRef.current = chart;
@@ -129,6 +122,11 @@ export function MainChart({
       borderDownColor: "#EF4444",
       wickUpColor: "#10B981",
       wickDownColor: "#EF4444",
+      priceFormat: {
+        type: "price",
+        precision: 5,
+        minMove: 0.00001,
+      },
     });
     candleSeriesRef.current = candleSeries;
 
@@ -162,7 +160,7 @@ export function MainChart({
     // Add native Lightweight Charts price lines for Entry, SL, and TP
     if (showAILayers && tradeSetup) {
       const isWatch = tradeSetup.isWatchLevel;
-      const prefix = isWatch ? "KEY WATCH " : "";
+      const prefix = isWatch ? "WATCH " : "";
 
       if (tradeSetup.takeProfit != null) {
         candleSeries.createPriceLine({
@@ -171,29 +169,28 @@ export function MainChart({
           lineWidth: 2,
           lineStyle: 2,
           axisLabelVisible: true,
-          title: `${prefix}TAKE PROFIT: ${tradeSetup.takeProfit.toFixed(4)}`,
+          title: `${prefix}TP ${tradeSetup.takeProfit.toFixed(4)}`,
         });
       }
 
-      if (tradeSetup.entryHigh != null) {
+      if (tradeSetup.entryHigh != null && tradeSetup.entryLow != null) {
+        const midEntry = (tradeSetup.entryHigh + tradeSetup.entryLow) / 2.0;
         candleSeries.createPriceLine({
-          price: tradeSetup.entryHigh,
+          price: midEntry,
           color: "#3B82F6",
           lineWidth: 1,
           lineStyle: 1,
           axisLabelVisible: true,
-          title: `${prefix}ENTRY HIGH: ${tradeSetup.entryHigh.toFixed(4)}`,
+          title: `${prefix}ENTRY ${midEntry.toFixed(4)}`,
         });
-      }
-
-      if (tradeSetup.entryLow != null) {
+      } else if (tradeSetup.entryLow != null) {
         candleSeries.createPriceLine({
           price: tradeSetup.entryLow,
           color: "#3B82F6",
           lineWidth: 1,
           lineStyle: 1,
           axisLabelVisible: true,
-          title: `${prefix}ENTRY LOW: ${tradeSetup.entryLow.toFixed(4)}`,
+          title: `${prefix}ENTRY ${tradeSetup.entryLow.toFixed(4)}`,
         });
       }
 
@@ -204,7 +201,43 @@ export function MainChart({
           lineWidth: 2,
           lineStyle: 2,
           axisLabelVisible: true,
-          title: `${prefix}STOP LOSS: ${tradeSetup.stopLoss.toFixed(4)}`,
+          title: `${prefix}SL ${tradeSetup.stopLoss.toFixed(4)}`,
+        });
+      }
+    }
+
+    // Add Volume Profile POC, VAH, and VAL Price Lines cleanly
+    if (showAILayers && volumeProfile) {
+      if (volumeProfile.poc != null) {
+        candleSeries.createPriceLine({
+          price: volumeProfile.poc,
+          color: "#F59E0B", // Gold
+          lineWidth: 2,
+          lineStyle: 0, // Solid
+          axisLabelVisible: true,
+          title: `POC ${volumeProfile.poc.toFixed(4)}`,
+        });
+      }
+
+      if (volumeProfile.vah != null) {
+        candleSeries.createPriceLine({
+          price: volumeProfile.vah,
+          color: "#06B6D4", // Cyan
+          lineWidth: 1,
+          lineStyle: 2, // Dashed
+          axisLabelVisible: false,
+          title: `VAH ${volumeProfile.vah.toFixed(4)}`,
+        });
+      }
+
+      if (volumeProfile.val != null) {
+        candleSeries.createPriceLine({
+          price: volumeProfile.val,
+          color: "#8B5CF6", // Purple
+          lineWidth: 1,
+          lineStyle: 2, // Dashed
+          axisLabelVisible: false,
+          title: `VAL ${volumeProfile.val.toFixed(4)}`,
         });
       }
     }
@@ -228,8 +261,7 @@ export function MainChart({
       chartRef.current = null;
       candleSeriesRef.current = null;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [candles, timeframe, tradeSetup, showAILayers]);
+  }, [candles, timeframe, tradeSetup, volumeProfile, showAILayers, chartMode, startLiveTick]);
 
   return (
     <div className="bg-card border border-border rounded-xl p-4 shadow-card">
@@ -280,7 +312,7 @@ export function MainChart({
                 </span>
               )}
               <span className="px-2 py-0.5 rounded bg-positive/10 border border-positive/20 text-positive font-medium">
-                ● Live lines active
+                ● 5-Decimal Precision Active
               </span>
             </>
           )}
@@ -295,7 +327,7 @@ export function MainChart({
           theme="dark"
         />
       ) : (
-        <div ref={chartContainerRef} className="w-full relative min-h-[420px]">
+        <div ref={chartContainerRef} className="w-full relative min-h-[440px]">
           {showAILayers && tradeSetup && tradeSetup.takeProfit != null && (
             <div className="absolute right-16 top-12 z-10 space-y-1 text-[10px] font-bold pointer-events-none">
               {tradeSetup.isWatchLevel ? (

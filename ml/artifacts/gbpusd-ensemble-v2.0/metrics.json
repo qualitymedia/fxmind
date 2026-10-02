@@ -1,0 +1,18 @@
+{
+  "accuracy": 0.6216,
+  "balanced_accuracy": 0.5939,
+  "precision_macro": 0.6071,
+  "recall_macro": 0.5939,
+  "f1_macro": 0.5971,
+  "log_loss": 0.9285,
+  "total_trades": 107,
+  "win_rate": 0.6916,
+  "profit_factor": 3.44,
+  "expectancy_pips": 4.59,
+  "avg_win_pips": 9.36,
+  "avg_loss_pips": 6.1,
+  "max_drawdown_pips": 30.26,
+  "sharpe_ratio": 5.91,
+  "sortino_ratio": 15.87,
+  "calmar_ratio": 16.24
+}

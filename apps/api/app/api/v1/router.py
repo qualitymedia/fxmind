@@ -14,6 +14,7 @@ from apps.api.app.api.v1 import (
     market,
     models,
     notifications,
+    paper_trading,
     performance,
     signals,
 )
@@ -30,4 +31,5 @@ api_v1_router.include_router(models.router)
 api_v1_router.include_router(alerts.router)
 api_v1_router.include_router(notifications.router)
 api_v1_router.include_router(logs.router)
+api_v1_router.include_router(paper_trading.router)
 api_v1_router.include_router(ws_router)

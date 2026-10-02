@@ -38,7 +38,8 @@ class ModelTrainer:
         run_optuna: bool = False,
     ) -> str:
         if version_name is None:
-            version_name = f"gbpusd-ensemble-v1.0"
+            version_name = f"gbpusd-ensemble-v2.0"
+
 
         print(f"[INFO] Starting model training pipeline for {version_name}...")
 
@@ -99,13 +100,14 @@ class ModelTrainer:
                 "objective": "multi:softprob",
                 "num_class": 3,
                 "max_depth": 4,
-                "learning_rate": 0.03,
-                "n_estimators": 250,
+                "learning_rate": 0.025,
+                "n_estimators": 350,
                 "subsample": 0.8,
-                "colsample_bytree": 0.8,
-                "min_child_weight": 15,
-                "reg_alpha": 0.1,
-                "reg_lambda": 1.0,
+                "colsample_bytree": 0.75,
+                "min_child_weight": 20,
+                "reg_alpha": 0.15,
+                "reg_lambda": 1.2,
+                "gamma": 0.05,
                 "random_state": 42,
                 "n_jobs": -1,
             }
@@ -149,6 +151,9 @@ class ModelTrainer:
             "features_engineered": len(X_df.columns),
             "has_vwap": True,
             "has_candlestick_patterns": True,
+            "has_volume_profile": True,
+            "has_vp_poc_strategy": True,
+            "has_smc_sweep": True,
             "created_at": datetime.now(timezone.utc).isoformat(),
         }
 

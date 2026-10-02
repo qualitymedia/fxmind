@@ -129,11 +129,8 @@ class MarketService:
                 chg_pct = round(((val - prev) / prev) * 100.0, 2)
                 bias = "BULLISH" if chg_pct > 0.05 else ("BEARISH" if chg_pct < -0.05 else "NEUTRAL")
             else:
-                # Dynamic fallback when cross parquet has not been populated
-                defaults = {"GBPUSD": 1.3458, "EURUSD": 1.0723, "USDJPY": 157.42, "DXY": 104.21, "EURGBP": 0.7976}
-                val = defaults.get(sym, 1.0)
-                chg_pct = 0.0
-                bias = "NEUTRAL"
+                # Skip pairs with no live data rather than show fake prices
+                continue
 
             results.append({
                 "symbol": sym,
@@ -143,3 +140,25 @@ class MarketService:
                 "correlation_note": note,
             })
         return results
+
+    async def get_volume_profile(self, symbol: str = "GBPUSD") -> dict:
+        """Calculate 24h rolling Volume Profile, POC, VAH, and VAL."""
+        from ml.features.volume_profile import compute_volume_profile
+
+        df = self.storage.load_candles_df(symbol, "M15")
+        if df.empty:
+            # Try fetching fallback candles
+            end = datetime.now(timezone.utc)
+            start = end - pd.Timedelta(days=5)
+            try:
+                candles = await self.provider.fetch_candles(symbol, "M15", start, end)
+                if candles:
+                    self.storage.save_candles(list(candles))
+                    df = self.storage.load_candles_df(symbol, "M15")
+            except Exception as e:
+                print(f"[MarketService] volume_profile fallback warning: {e}")
+
+        vp_data = compute_volume_profile(df)
+        vp_data["symbol"] = symbol
+        return vp_data
+

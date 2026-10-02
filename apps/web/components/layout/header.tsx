@@ -1,8 +1,23 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Search, Bell, Activity } from "lucide-react";
 
 export function Header() {
+  const [utcTime, setUtcTime] = useState<string>("");
+
+  useEffect(() => {
+    const updateTime = () => {
+      const now = new Date();
+      setUtcTime(
+        now.toISOString().substring(11, 19) + " UTC"
+      );
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <header className="h-16 bg-card border-b border-border px-6 flex items-center justify-between flex-shrink-0">
       {/* Search Input */}
@@ -21,8 +36,9 @@ export function Header() {
         <div className="flex items-center gap-2 text-xs text-text-secondary">
           <span className="w-2 h-2 rounded-full bg-positive animate-pulse" />
           <span className="font-semibold text-text-primary">Live</span>
-          <span className="text-text-muted">Updated 14:45:03 UTC</span>
+          <span className="text-text-muted font-mono">{utcTime || "Syncing..."}</span>
         </div>
+
 
         {/* Notifications Icon */}
         <button className="relative text-text-secondary hover:text-text-primary p-2 rounded-lg hover:bg-background transition-colors">

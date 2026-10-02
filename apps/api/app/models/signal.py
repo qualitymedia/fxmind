@@ -40,7 +40,7 @@ class Signal(Base, TimestampMixin):
         Index("ix_signal_status", "status"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     timeframe: Mapped[str] = mapped_column(String(10), nullable=False, default="M15")
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -116,9 +116,9 @@ class SignalReason(Base):
 
     __tablename__ = "signal_reasons"
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     signal_id: Mapped[int] = mapped_column(
-        BigInteger, ForeignKey("signals.id", ondelete="CASCADE"), nullable=False
+        Integer, ForeignKey("signals.id", ondelete="CASCADE"), nullable=False
     )
     category: Mapped[str] = mapped_column(String(50), nullable=False)
     reason: Mapped[str] = mapped_column(Text, nullable=False)

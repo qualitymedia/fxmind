@@ -1,15 +1,23 @@
 """
 Signals REST Endpoints:
-GET /api/v1/signals      — recent signal history (in-memory session log)
-GET /api/v1/signals/{id} — signal detail by ID
+GET /api/v1/signals      — recent signal history from database
+GET /api/v1/signals/{id} — signal detail by ID from database
 """
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.api.app.db.database import get_db
+from apps.api.app.models.signal import Signal
 from apps.api.app.schemas.signal import SignalListItem, SignalResponse
+from apps.api.app.services.signal_service import (
+    get_signals_from_db,
+    get_signal_by_id,
+    save_signal_to_db,
+)
 from ml.data.storage import ParquetStorage
 from ml.inference.service import InferenceService
 
@@ -18,51 +26,71 @@ router = APIRouter(prefix="/signals", tags=["signals"])
 _inference_service = InferenceService()
 _storage = ParquetStorage()
 
-# In-memory session signal log — populated on first call and updated as candles arrive.
-# This is NOT hardcoded data; it reflects real inference runs in the current server session.
-_session_signals: list[dict] = []
-_next_id: int = 1
 
-
-def _run_and_log_signal() -> dict:
-    """Run a fresh inference pass and append result to the session log."""
-    global _next_id
-    m15_df = _storage.load_candles_df("GBPUSD", "M15")
-    h1_df = _storage.load_candles_df("GBPUSD", "H1")
-    ctx_dfs = {s: _storage.load_candles_df(s, "M15") for s in ["EURUSD", "USDJPY", "EURGBP", "DXY"]}
-    result = _inference_service.analyze(m15_df, ctx_dfs, h1_df)
-    result["id"] = _next_id
-    _next_id += 1
-
-    # Avoid duplicating the same candle timestamp
-    if _session_signals and _session_signals[-1].get("timestamp") == result.get("timestamp"):
-        return _session_signals[-1]
-
-    _session_signals.append(result)
-    # Keep last 50 signals in memory
-    if len(_session_signals) > 50:
-        _session_signals.pop(0)
-
-    return result
-
-
-def _to_list_item(s: dict) -> SignalListItem:
-    trade = s.get("trade", {})
+def _model_to_list_item(s: Signal) -> SignalListItem:
     return SignalListItem(
-        id=s.get("id", 0),
-        timestamp=datetime.fromisoformat(s["timestamp"]) if isinstance(s.get("timestamp"), str) else s.get("timestamp", datetime.now(timezone.utc)),
-        bias=s.get("bias", "NEUTRAL"),
-        confidence=s.get("confidence", 0.333),
-        regime=s.get("regime", "RANGING"),
-        direction=trade.get("direction"),
-        strategy_type=trade.get("strategy_type"),
-        entry_low=trade.get("entry_low"),
-        entry_high=trade.get("entry_high"),
-        stop_loss=trade.get("stop_loss"),
-        take_profit=trade.get("take_profit"),
-        status=trade.get("status", "NO_TRADE"),
-        patterns=s.get("patterns", []),
-        outcome=s.get("outcome"),
+        id=s.id,
+        timestamp=s.timestamp,
+        bias=s.bias,
+        confidence=s.confidence,
+        regime=s.regime,
+        direction=s.direction,
+        strategy_type=None,
+        entry_low=s.entry_low,
+        entry_high=s.entry_high,
+        stop_loss=s.stop_loss,
+        take_profit=s.take_profit,
+        status=s.status,
+        patterns=[],
+        outcome=s.outcome,
+    )
+
+
+def _model_to_response(s: Signal) -> SignalResponse:
+    return SignalResponse(
+        id=s.id,
+        symbol=s.symbol,
+        timestamp=s.timestamp,
+        timeframe=s.timeframe,
+        bias=s.bias,
+        confidence=s.confidence,
+        regime=s.regime,
+        trade={
+            "status": s.status,
+            "direction": s.direction,
+            "entry_low": s.entry_low,
+            "entry_high": s.entry_high,
+            "stop_loss": s.stop_loss,
+            "take_profit": s.take_profit,
+            "risk_reward": s.risk_reward,
+        },
+        model={
+            "bull_probability": s.bull_probability,
+            "bear_probability": s.bear_probability,
+            "neutral_probability": s.neutral_probability,
+        },
+        market={
+            "atr14": s.atr14,
+            "spread": s.spread,
+            "session": s.session_name,
+        },
+        filters={
+            "news_clear": s.news_clear,
+            "liquidity_ok": s.liquidity_ok,
+            "spread_ok": s.spread_ok,
+        },
+        reasons=[
+            {
+                "category": r.category,
+                "reason": r.reason,
+                "value": r.value,
+                "sentiment": r.sentiment,
+            }
+            for r in s.reasons
+        ],
+        patterns=[],
+        model_version=s.model_version,
+        outcome=s.outcome,
     )
 
 
@@ -70,48 +98,37 @@ def _to_list_item(s: dict) -> SignalListItem:
 async def get_signals_list(
     limit: int = Query(20, ge=1, le=100),
     status: str | None = None,
+    db: AsyncSession = Depends(get_db),
 ) -> list[SignalListItem]:
     """
-    Get recent signal history from the live inference session.
-    Runs a fresh inference pass if no session signals exist yet.
+    Get recent signal history from the SQLite database.
+    If database has no signals yet, runs an inference pass and persists it.
     """
-    if not _session_signals:
+    db_signals = await get_signals_from_db(db, limit=limit, status=status)
+
+    if not db_signals and not status:
+        # Run cold-start inference and save to DB
         try:
-            _run_and_log_signal()
+            m15_df = _storage.load_candles_df("GBPUSD", "M15")
+            h1_df = _storage.load_candles_df("GBPUSD", "H1")
+            ctx_dfs = {s: _storage.load_candles_df(s, "M15") for s in ["EURUSD", "USDJPY", "EURGBP", "DXY"]}
+            result = _inference_service.analyze(m15_df, ctx_dfs, h1_df)
+            saved = await save_signal_to_db(result, db)
+            db_signals = [saved]
         except Exception as exc:
-            print(f"[Signals API] Inference error: {exc}")
+            print(f"[Signals API] Cold-start inference error: {exc}")
 
-    items = list(reversed(_session_signals))  # newest first
-    if status:
-        items = [s for s in items if s.get("trade", {}).get("status", "").upper() == status.upper()]
-
-    return [_to_list_item(s) for s in items[:limit]]
+    return [_model_to_list_item(s) for s in db_signals]
 
 
 @router.get("/{signal_id}", response_model=SignalResponse)
-async def get_signal_detail(signal_id: int) -> SignalResponse:
-    """Get signal detail by ID from the live session log."""
-    match = next((s for s in _session_signals if s.get("id") == signal_id), None)
-    if not match:
-        raise HTTPException(status_code=404, detail=f"Signal ID '{signal_id}' not found in current session.")
+async def get_signal_detail(
+    signal_id: int,
+    db: AsyncSession = Depends(get_db),
+) -> SignalResponse:
+    """Get signal detail by ID directly from the database."""
+    signal = await get_signal_by_id(db, signal_id)
+    if not signal:
+        raise HTTPException(status_code=404, detail=f"Signal ID '{signal_id}' not found in database.")
 
-    trade = match.get("trade", {})
-    model_probs = match.get("model", {})
-
-    return SignalResponse(
-        id=match["id"],
-        symbol=match.get("symbol", "GBPUSD"),
-        timestamp=datetime.fromisoformat(match["timestamp"]) if isinstance(match.get("timestamp"), str) else match.get("timestamp"),
-        timeframe=match.get("timeframe", "M15"),
-        bias=match.get("bias", "NEUTRAL"),
-        confidence=match.get("confidence", 0.333),
-        regime=match.get("regime", "RANGING"),
-        trade=trade,
-        model=model_probs,
-        market=match.get("market", {}),
-        filters=match.get("filters", {}),
-        reasons=match.get("reasons", []),
-        patterns=match.get("patterns", []),
-        model_version=match.get("model_version", "gbpusd-ensemble-v1.0"),
-        outcome=match.get("outcome"),
-    )
+    return _model_to_response(signal)

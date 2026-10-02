@@ -20,9 +20,8 @@ def main():
 
     storage = ParquetStorage(base_dir=project_root / "data" / "parquet")
     m15_df = storage.load_candles_df(args.symbol, "M15")
-
     if m15_df.empty:
-        print("❌ No M15 data found. Run scripts/create_demo_data.py first.")
+        print(f"❌ No M15 data found for {args.symbol}. Start the API server to fetch live data first.")
         return
 
     h1_df = storage.load_candles_df(args.symbol, "H1")

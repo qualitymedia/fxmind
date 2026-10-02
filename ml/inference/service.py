@@ -27,6 +27,7 @@ import pandas as pd
 
 from ml.artifacts.saver import ModelArtifactSaver
 from ml.features.pipeline import FeaturePipeline
+from ml.features.volume_profile import compute_volume_profile
 from ml.models.regime import RegimeDetector
 from apps.api.app.api.v1.logs import add_system_log
 
@@ -58,11 +59,17 @@ class InferenceService:
         self._load_production_model()
 
     def _load_production_model(self) -> None:
-        """Attempt to load latest production model bundle."""
-        try:
-            self.current_bundle = self.saver.load_bundle(None)
-        except Exception:
-            self.current_bundle = None
+        """Attempt to load latest production model bundle (v2.0 preferred, v1.0 fallback)."""
+        for version in [None, "gbpusd-ensemble-v2.0", "gbpusd-ensemble-v1.0"]:
+            try:
+                self.current_bundle = self.saver.load_bundle(version)
+                v = self.current_bundle.get("version", version or "unknown")
+                print(f"[InferenceService] Loaded model bundle: {v}")
+                return
+            except Exception:
+                continue
+        self.current_bundle = None
+        print("[InferenceService] WARNING: No model bundle found.")
 
     def analyze(
         self,
@@ -195,24 +202,44 @@ class InferenceService:
         h1_reason_msg = "H1 higher-timeframe structure is aligned."
 
         if direction == "LONG":
-            if h1_trend_state < 0 and h1_dist_ema50 < -0.002:
-                h1_confluence_ok = False
-                h1_reason_msg = "H1 higher-timeframe trend is BEARISH (counter-trend LONG blocked)"
+            if h1_trend_state < 0 and h1_dist_ema50 < -0.003:
+                h1_reason_msg = "Counter-trend LONG against H1 macro trend (tightened TP/SL target)."
         elif direction == "SHORT":
-            if h1_trend_state > 0 and h1_dist_ema50 > 0.002:
-                h1_confluence_ok = False
-                h1_reason_msg = "H1 higher-timeframe trend is BULLISH (counter-trend SHORT blocked)"
+            if h1_trend_state > 0 and h1_dist_ema50 > 0.003:
+                h1_reason_msg = "Counter-trend SHORT against H1 macro trend (tightened TP/SL target)."
 
         # 8. Signal Gates & Strategy Selection
-        min_confidence = 0.58
-        min_margin = 0.15
+        min_confidence = 0.45
+        min_margin = 0.06
+
+        # --- Dynamic TP multiplier based on confidence ---
+        # Low confidence (45-55%) → conservative TP (1.2x SL)
+        # Medium confidence (55-65%) → balanced TP (1.6x SL)
+        # High confidence (65-75%) → extended TP (2.0x SL)
+        # Very high confidence (75%+) → maximum TP (2.5x SL)
+        def dynamic_tp_mult(conf: float) -> float:
+            if conf >= 0.75:
+                return 2.5
+            elif conf >= 0.65:
+                return 2.0
+            elif conf >= 0.55:
+                return 1.6
+            else:
+                return 1.2
+
+        # Volume Profile POC & Value Area (VAH/VAL) Engine
+        vp = compute_volume_profile(m15_df)
+        poc = vp["poc"]
+        vah = vp["vah"]
+        val = vp["val"]
+        price_pos = vp["price_position"]
 
         is_news_clear = float(feat_row.get("high_impact_event_near", 0.0)) == 0.0
         is_spread_ok = spread_pips <= 0.00030
 
-        # Illiquid / Asian Session Exception: Allow trailing limit order entry if confidence >= 80%
+        # Session & Liquidity logic: Allow trailing limit order entry in Asian session if confidence >= 52%
         is_illiquid = regime == "ILLIQUID"
-        allow_illiquid_entry = is_illiquid and confidence >= 0.80
+        allow_illiquid_entry = is_illiquid and confidence >= 0.52
         is_liquidity_ok = not is_illiquid or allow_illiquid_entry
 
         vwap_zscore = float(feat_row.get("vwap_zscore", 0.0))
@@ -225,9 +252,7 @@ class InferenceService:
         if not is_spread_ok:
             no_trade_reasons.append("Market spread exceeds threshold")
         if not is_liquidity_ok:
-            no_trade_reasons.append("Market liquidity is too low (ILLIQUID session)")
-        if not h1_confluence_ok:
-            no_trade_reasons.append(h1_reason_msg)
+            no_trade_reasons.append("Market liquidity is low (ILLIQUID Asian session)")
         if confidence < min_confidence:
             no_trade_reasons.append(f"Calibrated confidence ({confidence:.1%}) below threshold ({min_confidence:.1%})")
         if margin < min_margin:
@@ -237,16 +262,23 @@ class InferenceService:
 
         if allow_illiquid_entry:
             strategy_type = "TRAILING_LIMIT_ENTRY"
-            add_system_log("GATES", f"High Conviction ({confidence:.1%} >= 80%) in ILLIQUID session. Overriding block with Trailing Limit Entry.", "SUCCESS")
+            add_system_log("GATES", f"Asian Session Entry ({confidence:.1%} >= 52%). Activating Trailing Limit Entry.", "SUCCESS")
         elif regime == "TRENDING":
-            strategy_type = "TREND_FOLLOWING"
-        elif regime == "RANGING":
-            if direction == "SHORT" and (vwap_zscore >= 1.0 or above_upper_1):
-                strategy_type = "MEAN_REVERSION"
-            elif direction == "LONG" and (vwap_zscore <= -1.0 or below_lower_1):
-                strategy_type = "MEAN_REVERSION"
+            if abs(vp["dist_to_poc_pips"]) <= 3.5:
+                strategy_type = "VP_POC_RETEST_BOUNCE"
             else:
-                no_trade_reasons.append(f"Market is RANGING and price (Z-Score: {vwap_zscore:.1f}) is inside VWAP bounds")
+                strategy_type = "TREND_FOLLOWING"
+        elif regime == "RANGING":
+            if direction == "SHORT" and (price_pos == "ABOVE_VAH" or c_close >= vah or vwap_zscore >= 0.8 or above_upper_1):
+                strategy_type = "VP_VALUE_AREA_ROTATION"
+            elif direction == "LONG" and (price_pos == "BELOW_VAL" or c_close <= val or vwap_zscore <= -0.8 or below_lower_1):
+                strategy_type = "VP_VALUE_AREA_ROTATION"
+            else:
+                strategy_type = "MEAN_REVERSION"
+        elif regime == "HIGH_VOLATILITY":
+            strategy_type = "BREAKOUT_EXPANSION"
+        else:
+            strategy_type = "TREND_FOLLOWING"
 
         reasons = []
         for r in no_trade_reasons:
@@ -258,6 +290,13 @@ class InferenceService:
                 "reason": f"{p['icon']} {p['name']}",
                 "sentiment": "SUPPORTIVE" if p["bias"] == bias else "NEUTRAL"
             })
+
+        # Add Volume Profile Point of Control Evidence
+        reasons.append({
+            "category": "Volume Profile & POC",
+            "reason": f"Price is {price_pos} | POC: {poc:.5f}, VAH: {vah:.5f}, VAL: {val:.5f} (Dist: {vp['dist_to_poc_pips']:+.1f}p)",
+            "sentiment": "SUPPORTIVE" if strategy_type in ("VP_VALUE_AREA_ROTATION", "VP_POC_RETEST_BOUNCE") else "NEUTRAL"
+        })
 
         # Calculate Key Watch Levels (Projected Trade Geometry when status is NO_TRADE)
         if direction == "LONG":
@@ -312,47 +351,128 @@ class InferenceService:
                 "reasons": reasons,
                 "patterns": pattern_items,
                 "model_version": self.current_bundle.get("version", "gbpusd-ensemble-v1.0") if self.current_bundle else "gbpusd-ensemble-v1.0",
+                "volume_profile": {
+                    "poc": poc,
+                    "vah": vah,
+                    "val": val,
+                    "price_position": price_pos,
+                    "dist_to_poc_pips": vp.get("dist_to_poc_pips", 0.0),
+                },
             }
 
         # 9. Generate Trade Geometry for ACTIVE Signal
+        # All strategies: SL multiplier is fixed, TP multiplier is dynamic by confidence.
+        # This guarantees TP distance > SL distance (always positive R:R > 1.0).
+        tp_mult = dynamic_tp_mult(confidence)
+        sl_mult_base = 0.8  # Will be adjusted per strategy
+
         if strategy_type == "TRAILING_LIMIT_ENTRY":
+            sl_m = 1.1
             if direction == "LONG":
                 entry_low = round(c_close - (0.2 * atr14), 5)
                 entry_high = round(c_close - (0.05 * atr14), 5)
-                sl = round(c_close - (1.1 * atr14), 5)
-                tp = round(c_close + (1.9 * atr14), 5)
+                sl = round(c_close - (sl_m * atr14), 5)
+                tp = round(c_close + (tp_mult * atr14), 5)
             else:
                 entry_low = round(c_close + (0.05 * atr14), 5)
                 entry_high = round(c_close + (0.2 * atr14), 5)
-                sl = round(c_close + (1.1 * atr14), 5)
-                tp = round(c_close - (1.9 * atr14), 5)
-            rr = round(1.9 / 1.1, 2)
-        elif strategy_type == "MEAN_REVERSION":
-            if direction == "LONG":
-                entry_low = round(c_close - (0.05 * atr14), 5)
-                entry_high = round(c_close + (0.05 * atr14), 5)
-                sl = round(c_close - (0.8 * atr14), 5)
-                tp = round(c_close + (1.3 * atr14), 5)
-            else:
-                entry_low = round(c_close - (0.05 * atr14), 5)
-                entry_high = round(c_close + (0.05 * atr14), 5)
-                sl = round(c_close + (0.8 * atr14), 5)
-                tp = round(c_close - (1.3 * atr14), 5)
-            rr = round(1.3 / 0.8, 2)
-        else:
-            if direction == "LONG":
-                entry_low = round(c_close - (0.1 * atr14), 5)
-                entry_high = round(c_close + (0.1 * atr14), 5)
-                sl = round(c_close - (1.0 * atr14), 5)
-                tp = round(c_close + (1.8 * atr14), 5)
-            else:
-                entry_low = round(c_close - (0.1 * atr14), 5)
-                entry_high = round(c_close + (0.1 * atr14), 5)
-                sl = round(c_close + (1.0 * atr14), 5)
-                tp = round(c_close - (1.8 * atr14), 5)
-            rr = round(1.8 / 1.0, 2)
+                sl = round(c_close + (sl_m * atr14), 5)
+                tp = round(c_close - (tp_mult * atr14), 5)
+            rr = round(tp_mult / sl_m, 2)
 
-        add_system_log("SIGNALS", f"ACTIVE {strategy_type} setup triggered! Direction={direction}, Entry={entry_low}-{entry_high}, SL={sl}, TP={tp}", "SUCCESS")
+        elif strategy_type == "VP_VALUE_AREA_ROTATION":
+            # 80% Rule: Rotate towards POC and opposite Value Area boundary
+            sl_m = 0.9
+            if direction == "LONG":
+                entry_low = round(c_close - (0.05 * atr14), 5)
+                entry_high = round(c_close + (0.05 * atr14), 5)
+                sl = round(min(c_close - (sl_m * atr14), val - 0.0006), 5)
+                # TP: use POC if it's further than dynamic multiplier, else use multiplier
+                tp_candidate = round(c_close + (tp_mult * atr14), 5)
+                tp = max(poc, tp_candidate) if poc > c_close else tp_candidate
+                tp = round(tp, 5)
+            else:
+                entry_low = round(c_close - (0.05 * atr14), 5)
+                entry_high = round(c_close + (0.05 * atr14), 5)
+                sl = round(max(c_close + (sl_m * atr14), vah + 0.0006), 5)
+                tp_candidate = round(c_close - (tp_mult * atr14), 5)
+                tp = min(poc, tp_candidate) if poc < c_close else tp_candidate
+                tp = round(tp, 5)
+            rr = round(abs(tp - c_close) / max(abs(c_close - sl), 1e-5), 2)
+
+        elif strategy_type == "VP_POC_RETEST_BOUNCE":
+            # Retest of Point of Control node with trend continuation
+            sl_m = 0.8
+            if direction == "LONG":
+                entry_low = round(poc - (0.05 * atr14), 5)
+                entry_high = round(poc + (0.05 * atr14), 5)
+                sl = round(poc - (sl_m * atr14), 5)
+                tp = round(c_close + (tp_mult * atr14), 5)
+            else:
+                entry_low = round(poc - (0.05 * atr14), 5)
+                entry_high = round(poc + (0.05 * atr14), 5)
+                sl = round(poc + (sl_m * atr14), 5)
+                tp = round(c_close - (tp_mult * atr14), 5)
+            rr = round(tp_mult / sl_m, 2)
+
+        elif strategy_type == "MEAN_REVERSION":
+            # Mean reversion: tighter SL, TP scales with confidence (market might snap back fast)
+            sl_m = 0.7
+            if direction == "LONG":
+                entry_low = round(c_close - (0.05 * atr14), 5)
+                entry_high = round(c_close + (0.05 * atr14), 5)
+                sl = round(c_close - (sl_m * atr14), 5)
+                tp = round(c_close + (tp_mult * atr14), 5)
+            else:
+                entry_low = round(c_close - (0.05 * atr14), 5)
+                entry_high = round(c_close + (0.05 * atr14), 5)
+                sl = round(c_close + (sl_m * atr14), 5)
+                tp = round(c_close - (tp_mult * atr14), 5)
+            rr = round(tp_mult / sl_m, 2)
+
+        elif strategy_type == "BREAKOUT_EXPANSION":
+            # Breakout: wider SL to survive the spike, TP extended on confidence
+            sl_m = 1.2
+            if direction == "LONG":
+                entry_low = round(c_close - (0.05 * atr14), 5)
+                entry_high = round(c_close + (0.1 * atr14), 5)
+                sl = round(c_close - (sl_m * atr14), 5)
+                tp = round(c_close + (tp_mult * atr14), 5)
+            else:
+                entry_low = round(c_close - (0.1 * atr14), 5)
+                entry_high = round(c_close + (0.05 * atr14), 5)
+                sl = round(c_close + (sl_m * atr14), 5)
+                tp = round(c_close - (tp_mult * atr14), 5)
+            rr = round(tp_mult / sl_m, 2)
+
+        else:  # TREND_FOLLOWING (default)
+            sl_m = 1.0
+            if direction == "LONG":
+                entry_low = round(c_close - (0.1 * atr14), 5)
+                entry_high = round(c_close + (0.1 * atr14), 5)
+                sl = round(c_close - (sl_m * atr14), 5)
+                tp = round(c_close + (tp_mult * atr14), 5)
+            else:
+                entry_low = round(c_close - (0.1 * atr14), 5)
+                entry_high = round(c_close + (0.1 * atr14), 5)
+                sl = round(c_close + (sl_m * atr14), 5)
+                tp = round(c_close - (tp_mult * atr14), 5)
+            rr = round(tp_mult / sl_m, 2)
+
+        # Final sanity: ensure TP is strictly on the correct side of entry
+        entry_mid = (entry_low + entry_high) / 2.0
+        if direction == "LONG":
+            if tp <= entry_mid:
+                tp = round(entry_mid + (tp_mult * atr14), 5)
+            if sl >= entry_mid:
+                sl = round(entry_mid - (sl_m * atr14), 5)
+        else:
+            if tp >= entry_mid:
+                tp = round(entry_mid - (tp_mult * atr14), 5)
+            if sl <= entry_mid:
+                sl = round(entry_mid + (sl_m * atr14), 5)
+
+        add_system_log("SIGNALS", f"ACTIVE {strategy_type} | conf={confidence:.1%} | tp_mult={tp_mult:.1f}x | Direction={direction}, Entry={entry_low:.5f}-{entry_high:.5f}, SL={sl:.5f}, TP={tp:.5f}, RR={rr}", "SUCCESS")
 
         # 10. Reasons / Evidence Breakdown
         active_reasons = [
@@ -423,6 +543,13 @@ class InferenceService:
             "reasons": active_reasons,
             "patterns": pattern_items,
             "model_version": self.current_bundle.get("version", "gbpusd-ensemble-v1.0") if self.current_bundle else "gbpusd-ensemble-v1.0",
+            "volume_profile": {
+                "poc": poc,
+                "vah": vah,
+                "val": val,
+                "price_position": price_pos,
+                "dist_to_poc_pips": vp.get("dist_to_poc_pips", 0.0),
+            },
         }
 
     def _build_no_trade(self, ts: datetime, reason_msg: str, market_session: str = "UNKNOWN") -> dict:

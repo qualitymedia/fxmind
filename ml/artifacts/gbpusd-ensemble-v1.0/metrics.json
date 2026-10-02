@@ -12,7 +12,7 @@
   "avg_win_pips": 6.45,
   "avg_loss_pips": 4.94,
   "max_drawdown_pips": 54.01,
-  "sharpe_ratio": 38.15,
-  "sortino_ratio": 86.26,
+  "sharpe_ratio": 2.63,
+  "sortino_ratio": 5.95,
   "calmar_ratio": 3.18
 }

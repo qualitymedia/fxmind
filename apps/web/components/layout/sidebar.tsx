@@ -4,9 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
   LayoutDashboard,
-  LineChart,
   Zap,
-  Terminal,
+  Activity,
   Calendar,
   BarChart3,
   Bell,
@@ -15,9 +14,8 @@ import {
 
 const NAV_ITEMS = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-  { name: "Market", href: "/market", icon: LineChart },
   { name: "Signals", href: "/signals", icon: Zap },
-  { name: "AI Logs", href: "/logs", icon: Terminal, badge: "LIVE" },
+  { name: "Activity", href: "/logs", icon: Activity, badge: "LIVE" },
   { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Performance", href: "/performance", icon: BarChart3 },
   { name: "Alerts", href: "/alerts", icon: Bell, badge: 3 },
@@ -81,15 +79,15 @@ export function Sidebar() {
         </nav>
       </div>
 
-      {/* Real Data & Live Stream Status Badge */}
+      {/* Verified Live Feed Status */}
       <div className="p-3 bg-background rounded-lg border border-border flex items-center gap-3">
         <div className="w-2 h-2 rounded-full bg-positive animate-pulse" />
         <div>
           <span className="text-xs font-semibold text-text-primary block">
-            LIVE STREAM &bull; AUTHENTIC
+            LIVE FEED &bull; VERIFIED
           </span>
           <span className="text-[11px] text-text-secondary block">
-            TradingView + Yahoo Finance Feed
+            High-Frequency Forex Feed
           </span>
         </div>
       </div>

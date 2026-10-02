@@ -22,7 +22,7 @@ import pandas as pd
 from ml.backtest.execution import Position
 
 
-def compute_trading_metrics(positions: list[Position], initial_capital: float = 10000.0) -> dict:
+def compute_trading_metrics(positions: list[Position], initial_capital: float = 100.0) -> dict:
     """Compute comprehensive performance metrics from closed positions."""
     closed = [p for p in positions if p.status in ("CLOSED_TP", "CLOSED_SL", "CLOSED_EXPIRED")]
     
@@ -59,14 +59,17 @@ def compute_trading_metrics(positions: list[Position], initial_capital: float = 
     drawdowns = running_max - equity
     max_dd = drawdowns.max() if len(drawdowns) > 0 else 0.0
 
-    # Annualized Sharpe ratio (assuming M15 trades)
+    # Annualized Sharpe ratio based on trades per year (not M15 bar count)
+    trades_per_year = max(1.0, float(len(closed)))
+    ann_factor = np.sqrt(trades_per_year)
+
     returns_std = np.std(pnls) if len(pnls) > 1 else 1.0
-    sharpe = (np.mean(pnls) / (returns_std + 1e-6)) * np.sqrt(252 * 24 * 4)
+    sharpe = (np.mean(pnls) / (returns_std + 1e-6)) * ann_factor
 
     # Sortino ratio (downside deviation)
     downside_returns = np.minimum(0, pnls)
     downside_std = np.std(downside_returns) if len(downside_returns) > 1 else 1.0
-    sortino = (np.mean(pnls) / (downside_std + 1e-6)) * np.sqrt(252 * 24 * 4)
+    sortino = (np.mean(pnls) / (downside_std + 1e-6)) * ann_factor
 
     calmar = (np.sum(pnls) / (max_dd + 1e-6)) if max_dd > 0 else 0.0
 

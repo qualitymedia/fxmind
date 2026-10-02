@@ -26,7 +26,7 @@ regime:
   trending_adx: 25.0
 
 backtest:
-  initial_capital: 10000.0
+  initial_capital: 100.0
   fixed_spread_pips: 0.8
   slippage_pips: 0.2
   execution_delay_ms: 50

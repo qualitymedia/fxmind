@@ -31,8 +31,6 @@ async def get_current_analysis(symbol: str = "GBPUSD") -> AnalysisResponse:
 
     signal_dict = inference_service.analyze(m15_df, context_dfs, h1_df)
 
-    # Attach dummy ID if missing
-    signal_dict["id"] = 101
 
     market_overview = await market_service.get_overview(symbol)
     cross_market = await market_service.get_cross_market_context()

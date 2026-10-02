@@ -80,10 +80,10 @@ export function AILogConsolePanel() {
         <div className="flex items-center gap-2">
           <Terminal className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-bold font-display text-text-primary uppercase tracking-wider">
-            AI System Execution Log
+            Live Activity & Decision Audit
           </h2>
           <span className="text-[10px] bg-primary/10 text-primary px-2 py-0.5 rounded font-bold">
-            LIVE FEED
+            AUDIT STREAM
           </span>
         </div>
 
@@ -110,13 +110,13 @@ export function AILogConsolePanel() {
         {loading && logs.length === 0 && (
           <div className="py-8 text-center text-slate-500 animate-pulse flex items-center justify-center gap-2">
             <RefreshCw className="w-4 h-4 animate-spin" />
-            Connecting to AI background log stream…
+            Connecting to live execution stream…
           </div>
         )}
 
         {!loading && logs.length === 0 && (
           <div className="py-8 text-center text-slate-500">
-            No system log events recorded for filter [{activeCategory}].
+            No execution events recorded for category [{activeCategory}].
           </div>
         )}
 
