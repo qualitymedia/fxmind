@@ -1,0 +1,191 @@
+"""
+Telegram Community & Mobile Alert Service.
+
+Dispatches instant real-time institutional trade signals and trade resolution
+notifications directly to Telegram groups, channels, or private chats.
+100% free via the standard Telegram Bot API.
+"""
+
+from __future__ import annotations
+
+import os
+import json
+import logging
+from pathlib import Path
+from typing import Optional
+import httpx
+
+logger = logging.getLogger("telegram_service")
+
+CONFIG_FILE = Path("data/telegram_config.json")
+
+
+class TelegramService:
+    def __init__(self):
+        self.bot_token: Optional[str] = None
+        self.chat_id: Optional[str] = None
+        self._load_config()
+
+    def _load_config(self) -> None:
+        """Load Telegram token & chat_id from environment or saved config."""
+        self.bot_token = os.getenv("TELEGRAM_BOT_TOKEN")
+        self.chat_id = os.getenv("TELEGRAM_CHAT_ID")
+
+        if not self.bot_token or not self.chat_id:
+            if CONFIG_FILE.exists():
+                try:
+                    with open(CONFIG_FILE, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                        self.bot_token = self.bot_token or data.get("bot_token")
+                        self.chat_id = self.chat_id or data.get("chat_id")
+                except Exception as e:
+                    logger.warning(f"Could not load telegram config: {e}")
+
+    def save_config(self, bot_token: str, chat_id: str) -> None:
+        """Persist bot token and chat_id to data/telegram_config.json."""
+        self.bot_token = bot_token.strip()
+        self.chat_id = chat_id.strip()
+
+        CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        with open(CONFIG_FILE, "w", encoding="utf-8") as f:
+            json.dump({"bot_token": self.bot_token, "chat_id": self.chat_id}, f, indent=2)
+
+    def is_configured(self) -> bool:
+        return bool(self.bot_token and self.chat_id)
+
+    async def send_message(self, text: str) -> bool:
+        """Send an HTML-formatted message to Telegram."""
+        if not self.is_configured():
+            logger.info("[Telegram] Bot token or chat_id not configured. Skipping alert.")
+            return False
+
+        url = f"https://api.telegram.org/bot{self.bot_token}/sendMessage"
+        payload = {
+            "chat_id": self.chat_id,
+            "text": text,
+            "parse_mode": "HTML",
+            "disable_web_page_preview": True,
+        }
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.post(url, json=payload)
+                if res.status_code == 200:
+                    logger.info("[Telegram] Alert delivered successfully.")
+                    return True
+                else:
+                    logger.error(f"[Telegram] Delivery failed: {res.status_code} - {res.text}")
+                    return False
+        except Exception as e:
+            logger.error(f"[Telegram] Request exception: {e}")
+            return False
+
+    async def send_signal_alert(self, signal: dict) -> bool:
+        """Format and dispatch a high-probability trade setup."""
+        if not self.is_configured():
+            return False
+
+        trade = signal.get("trade", {})
+        direction = trade.get("direction", signal.get("bias", "LONG"))
+        symbol = signal.get("symbol", "GBPUSD")
+        confidence = signal.get("confidence", 0.0) * 100
+        regime = signal.get("regime", "TRENDING")
+
+        entry_low = trade.get("entry_low", 0.0)
+        entry_high = trade.get("entry_high", 0.0)
+        stop_loss = trade.get("stop_loss", 0.0)
+        take_profit = trade.get("take_profit", 0.0)
+        rr = trade.get("risk_reward", 2.0)
+
+        is_buy = direction in ("LONG", "BUY")
+        dir_icon = "🟢" if is_buy else "🔴"
+        dir_text = "BUY / LONG" if is_buy else "SELL / SHORT"
+
+        # Pip calculations
+        entry_mid = (entry_low + entry_high) / 2.0 if entry_low and entry_high else (entry_low or 1.3200)
+        sl_pips = abs(entry_mid - stop_loss) * 10000.0 if stop_loss else 0.0
+        tp_pips = abs(take_profit - entry_mid) * 10000.0 if take_profit else 0.0
+
+        message = (
+            f"🚀 <b>FXMind Institutional Signal</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>Instrument:</b> #{symbol} (M15)\n"
+            f"<b>Action:</b> {dir_icon} <b>{dir_text}</b>\n"
+            f"<b>AI Confidence:</b> <b>{confidence:.1f}%</b>\n"
+            f"<b>Market Regime:</b> <code>{regime}</code>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🎯 <b>Entry Zone:</b> <code>{entry_low:.5f} – {entry_high:.5f}</code>\n"
+            f"🛑 <b>Stop Loss:</b> <code>{stop_loss:.5f}</code> ({sl_pips:.1f} pips)\n"
+            f"🏆 <b>Take Profit:</b> <code>{take_profit:.5f}</code> ({tp_pips:.1f} pips)\n"
+            f"⚖️ <b>Risk/Reward:</b> <b>1:{rr:.2f}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"🛡️ <i>Automated Risk Guard Active</i>\n"
+            f"⚡ <i>Generated by FXMind Quant Engine</i>"
+        )
+
+        return await self.send_message(message)
+
+    async def send_trade_closed_alert(self, trade: dict) -> bool:
+        """Format and dispatch a trade resolution alert."""
+        if not self.is_configured():
+            return False
+
+        status = trade.get("status", "CLOSED")
+        symbol = trade.get("symbol", "GBPUSD")
+        direction = trade.get("direction", "LONG")
+        pnl_pips = trade.get("pnl_pips", 0.0)
+        realized_pnl = trade.get("realized_pnl", 0.0)
+
+        is_win = pnl_pips > 0
+        icon = "🏆" if status == "TARGET_HIT" else ("🛑" if status == "STOP_HIT" else "⏱️")
+        headline = "TAKE PROFIT REACHED" if status == "TARGET_HIT" else ("STOP LOSS HIT" if status == "STOP_HIT" else "TRADE EXPIRED")
+
+        pnl_sign = "+" if pnl_pips >= 0 else ""
+        usd_sign = "+" if realized_pnl >= 0 else ""
+
+        message = (
+            f"{icon} <b>FXMind Trade Resolution: {headline}</b>\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"<b>Instrument:</b> #{symbol} ({direction})\n"
+            f"<b>Status:</b> <code>{status}</code>\n"
+            f"<b>PnL Result:</b> <b>{pnl_sign}{pnl_pips:.1f} pips</b> ({usd_sign}${realized_pnl:.2f})\n"
+            f"━━━━━━━━━━━━━━━━━━━━\n"
+            f"📊 <i>Ledger updated & verified</i>"
+        )
+
+        return await self.send_message(message)
+
+    async def test_connection(self) -> dict:
+        """Verify bot credentials by checking bot info and sending a test ping."""
+        if not self.is_configured():
+            return {"success": False, "error": "Bot token or Chat ID is missing."}
+
+        url = f"https://api.telegram.org/bot{self.bot_token}/getMe"
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                res = await client.get(url)
+                if res.status_code != 200:
+                    return {"success": False, "error": f"Invalid bot token (HTTP {res.status_code})"}
+
+                bot_info = res.json().get("result", {})
+                bot_username = bot_info.get("username", "UnknownBot")
+
+                # Send test ping message
+                test_msg = (
+                    f"✅ <b>FXMind Telegram Bridge Connected!</b>\n\n"
+                    f"Your bot <b>@{bot_username}</b> is successfully linked to FXMind.\n"
+                    f"Real-time institutional trading alerts will now be delivered here."
+                )
+                sent = await self.send_message(test_msg)
+                if sent:
+                    return {"success": True, "bot_username": bot_username}
+                else:
+                    return {
+                        "success": False,
+                        "error": "Bot token is valid, but failed to send message to Chat ID. Ensure the bot is added to the channel/group or started in private chat.",
+                    }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+
+telegram_service = TelegramService()

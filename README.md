@@ -72,28 +72,35 @@ cd gbpusd-ai-assistant
 cp .env.example .env
 ```
 
-### 2. Run with Docker Compose
+### 2. Running Locally
+
+#### Start Backend:
 ```bash
-docker-compose up --build
+cd backend
+python -m venv venv
+# Windows: venv\Scripts\activate | Unix: source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
 ```
-This will launch:
-- **PostgreSQL Database**: `localhost:5432`
-- **FastAPI Backend**: `http://localhost:8000` (Docs: `http://localhost:8000/docs`)
-- **Next.js Frontend**: `http://localhost:3000`
 
-### 3. Generate Historical Data & Train ML Model
+#### Start Frontend:
 ```bash
-# Generate 2 years of demo market data
-python scripts/create_demo_data.py
+cd frontend
+npm install
+npm run dev
+```
 
-# Run leakage prevention tests
-python -m pytest ml/validation/leakage_tests.py -v
+### 3. Historical Data & Model Training
+```bash
+cd backend
+# Fetch live multi-asset historical data
+python scripts/fetch_yfinance_data.py
 
-# Train XGBoost multiclass model with probability calibration
-python scripts/train_model.py --version gbpusd-m15-v1.0
+# Train ensemble ML model with probability calibration
+python scripts/retrain_v2.py
 
-# Run event-driven backtest
-python scripts/run_backtest.py --version gbpusd-m15-v1.0
+# Run backtest validation
+python scripts/run_backtest.py --version gbpusd-ensemble-v2.0
 ```
 
 ---
@@ -101,11 +108,11 @@ python scripts/run_backtest.py --version gbpusd-m15-v1.0
 ## 🧪 Testing & Verification
 
 ```bash
-# Run backend API unit tests
-cd apps/api && python -m pytest tests/ -v
+# Run backend tests
+cd backend && python -m pytest tests/ -v
 
-# Run data leakage tests
-python -m pytest ml/validation/leakage_tests.py -v
+# Typecheck frontend
+cd frontend && npm run build
 ```
 
 ---

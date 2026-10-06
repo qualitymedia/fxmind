@@ -22,7 +22,7 @@ import pandas as pd
 from ml.backtest.execution import Position
 
 
-def compute_trading_metrics(positions: list[Position], initial_capital: float = 100.0) -> dict:
+def compute_trading_metrics(positions: list[Position], initial_capital: float = 10000.0) -> dict:
     """Compute comprehensive performance metrics from closed positions."""
     closed = [p for p in positions if p.status in ("CLOSED_TP", "CLOSED_SL", "CLOSED_EXPIRED")]
     
