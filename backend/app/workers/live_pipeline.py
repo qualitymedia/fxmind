@@ -112,16 +112,20 @@ class LivePipelineWorker:
         self.last_processed_timestamp = latest_ts
         print(f"[LIVE WORKER] New M15 candle closed at {latest_ts}. Running AI pipeline...")
 
-        # 3. Run full Inference Pipeline
-        h1_df = self.storage.load_candles_df("GBPUSD", "H1")
-        context_dfs = {s: self.storage.load_candles_df(s, "M15") for s in ["EURUSD", "USDJPY", "EURGBP", "DXY"]}
+        # 3. Run full Inference Pipeline — offloaded to thread pool to prevent blocking the event loop
+        loop = asyncio.get_running_loop()
 
-        analysis_result = self.inference_service.analyze(
-            m15_df=m15_df,
-            context_dfs=context_dfs,
-            h1_df=h1_df,
-            spread_pips=quote.spread,
-        )
+        def _load_and_analyze():
+            _h1_df = self.storage.load_candles_df("GBPUSD", "H1")
+            _context_dfs = {s: self.storage.load_candles_df(s, "M15") for s in ["EURUSD", "USDJPY", "EURGBP", "DXY"]}
+            return self.inference_service.analyze(
+                m15_df=m15_df,
+                context_dfs=_context_dfs,
+                h1_df=_h1_df,
+                spread_pips=quote.spread,
+            )
+
+        analysis_result = await loop.run_in_executor(None, _load_and_analyze)
 
         # 4. Save Signal to SQLite DB & Open Paper Trade if ACTIVE
         db_signal_id = None

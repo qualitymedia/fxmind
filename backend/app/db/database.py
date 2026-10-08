@@ -28,16 +28,31 @@ _engine = None
 _session_factory = None
 
 
+async def _configure_sqlite(conn, _):
+    """Enable WAL journal mode and busy timeout on every new SQLite connection."""
+    await conn.execute("PRAGMA journal_mode=WAL")
+    await conn.execute("PRAGMA busy_timeout=30000")  # 30s wait before SQLITE_BUSY error
+    await conn.execute("PRAGMA synchronous=NORMAL")
+
+
 def get_engine():
     """Get or create the async engine."""
     global _engine
     if _engine is None:
         settings = get_settings()
         if "sqlite" in settings.db_url:
+            from sqlalchemy import event
             _engine = create_async_engine(
                 settings.db_url,
                 echo=settings.debug and settings.app_env.value == "development",
+                connect_args={"timeout": 30},
             )
+            # Apply WAL + busy timeout on every new connection
+            event.listen(_engine.sync_engine, "connect", lambda c, _: (
+                c.execute("PRAGMA journal_mode=WAL"),
+                c.execute("PRAGMA busy_timeout=30000"),
+                c.execute("PRAGMA synchronous=NORMAL"),
+            ))
         else:
             _engine = create_async_engine(
                 settings.db_url,

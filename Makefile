@@ -13,8 +13,8 @@ help: ## Show this help
 # ─── Setup ──────────────────────────────────────
 setup: ## Initial project setup
 	cp -n .env.example .env || true
-	cd apps/api && $(PIP) install -r requirements.txt
-	cd apps/web && $(NPM) install
+	cd backend && $(PIP) install -r requirements.txt
+	cd frontend && $(NPM) install
 	$(MAKE) migrate
 	@echo "✅ Setup complete. Run 'make dev' to start."
 
@@ -26,11 +26,10 @@ setup-docker: ## Setup with Docker
 
 # ─── Development ────────────────────────────────
 dev: ## Start all services locally
-	@echo "Starting PostgreSQL, API, and Web..."
-	$(DOCKER) up db -d
-	cd apps/api && $(PYTHON) -m uvicorn app.main:app --reload --port 8000 &
-	cd apps/web && $(NPM) run dev &
-	@echo "✅ Services starting. API: http://localhost:8000 | Web: http://localhost:3000"
+	@echo "Starting API and Web..."
+	cd backend && $(PYTHON) -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000 &
+	cd frontend && $(NPM) run dev &
+	@echo "✅ Services starting. API: http://127.0.0.1:8000 | Web: http://localhost:3000"
 
 docker-dev: ## Start all services with Docker
 	$(DOCKER) up --build
@@ -40,21 +39,21 @@ docker-down: ## Stop Docker services
 
 # ─── Database ───────────────────────────────────
 migrate: ## Run database migrations
-	cd apps/api && alembic upgrade head
+	cd backend && alembic upgrade head
 
 migrate-new: ## Create a new migration (usage: make migrate-new MSG="description")
-	cd apps/api && alembic revision --autogenerate -m "$(MSG)"
+	cd backend && alembic revision --autogenerate -m "$(MSG)"
 
 migrate-down: ## Rollback last migration
-	cd apps/api && alembic downgrade -1
+	cd backend && alembic downgrade -1
 
 # ─── Testing ────────────────────────────────────
 test: ## Run all tests
-	cd apps/api && $(PYTHON) -m pytest tests/ -v
+	cd backend && $(PYTHON) -m pytest tests/ -v
 	$(PYTHON) -m pytest ml/validation/leakage_tests.py -v
 
 test-api: ## Run API tests only
-	cd apps/api && $(PYTHON) -m pytest tests/ -v
+	cd backend && $(PYTHON) -m pytest tests/ -v
 
 test-ml: ## Run ML tests only
 	$(PYTHON) -m pytest ml/ -v
@@ -64,28 +63,28 @@ test-leakage: ## Run leakage tests
 
 # ─── ML Pipeline ────────────────────────────────
 demo-data: ## Generate demo data
-	$(PYTHON) scripts/create_demo_data.py
+	cd backend && $(PYTHON) scripts/create_demo_data.py
 
 features: ## Build feature matrix
-	$(PYTHON) scripts/build_features.py --config configs/training.yaml
+	cd backend && $(PYTHON) scripts/build_features.py --config configs/training.yaml
 
 train: ## Train the model
-	$(PYTHON) scripts/train_model.py --config configs/training.yaml
+	cd backend && $(PYTHON) scripts/retrain_v2.py
 
 evaluate: ## Evaluate the model
-	$(PYTHON) scripts/evaluate_model.py --config configs/training.yaml
+	cd backend && $(PYTHON) scripts/evaluate_model.py --config configs/training.yaml
 
 backtest: ## Run backtester
-	$(PYTHON) scripts/run_backtest.py --config configs/training.yaml
+	cd backend && $(PYTHON) scripts/run_backtest.py --config configs/training.yaml
 
 # ─── Utilities ──────────────────────────────────
 lint: ## Run linters
-	cd apps/api && $(PYTHON) -m ruff check .
-	cd apps/web && $(NPM) run lint
+	cd backend && $(PYTHON) -m ruff check .
+	cd frontend && $(NPM) run lint
 
 clean: ## Clean generated files
 	find . -type d -name "__pycache__" -exec rm -rf {} + 2>/dev/null || true
 	find . -type d -name ".pytest_cache" -exec rm -rf {} + 2>/dev/null || true
 	find . -name "*.pyc" -delete 2>/dev/null || true
-	rm -rf apps/web/.next 2>/dev/null || true
+	rm -rf frontend/.next 2>/dev/null || true
 	@echo "✅ Cleaned."

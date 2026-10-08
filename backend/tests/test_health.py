@@ -17,3 +17,8 @@ async def test_health_check(async_client: AsyncClient):
     assert "market_data" in data
     assert "model" in data
     assert "timestamp" in data
+
+    # Regression: the restructure should not leave the database empty when the parquet
+    # files and model bundle are still present in the project.
+    assert data["market_data"] == "healthy"
+    assert data["model"] == "healthy"

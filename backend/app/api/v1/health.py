@@ -7,79 +7,106 @@ market data, and model availability.
 
 from __future__ import annotations
 
+import asyncio
+import sqlite3
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends
-from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
+import pandas as pd
+from fastapi import APIRouter
 
 from app.core.config import get_settings
-from app.db.database import get_db
 from app.schemas.common import HealthResponse
+from ml.artifacts.saver import ModelArtifactSaver
 
 router = APIRouter(tags=["health"])
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check(db: AsyncSession = Depends(get_db)) -> HealthResponse:
+async def health_check() -> HealthResponse:
     """
-    System health check.
-    
-    Returns the status of all critical subsystems:
-    - database: PostgreSQL connection
-    - market_data: Data availability and freshness
-    - model: ML model availability
+    Lightweight system health check — does NOT use the async session pool
+    so it always responds even when the live worker holds the write lock.
     """
     settings = get_settings()
 
-    # Check database
-    db_status = "healthy"
-    try:
-        await db.execute(text("SELECT 1"))
-    except Exception:
-        db_status = "unhealthy"
+    def _check_db():
+        """Run direct sqlite3 checks in a thread (bypasses async pool contention)."""
+        db_status = "healthy"
+        market_status = "healthy"
+        model_status = "healthy"
+        model_version = None
+        last_market_update = None
+        last_prediction = None
 
-    # Check market data availability
-    market_status = "healthy"
-    last_market_update = None
-    try:
-        result = await db.execute(
-            text(
-                "SELECT MAX(timestamp) FROM market_candles "
-                "WHERE symbol = 'GBPUSD'"
-            )
-        )
-        last_market_update = result.scalar_one_or_none()
-        if last_market_update is None:
-            market_status = "no_data"
-    except Exception:
-        market_status = "unavailable"
+        try:
+            db_path = (settings.project_root / "data" / "fxmind.db").resolve()
+            if not db_path.exists():
+                return "no_db", "no_data", "no_model", None, None, None
 
-    # Check model availability
-    model_status = "healthy"
-    model_version = None
-    last_prediction = None
-    try:
-        result = await db.execute(
-            text(
-                "SELECT version FROM model_versions "
-                "WHERE state = 'PRODUCTION' "
-                "ORDER BY created_at DESC LIMIT 1"
-            )
-        )
-        model_version = result.scalar_one_or_none()
-        if model_version is None:
-            model_status = "no_model"
+            conn = sqlite3.connect(str(db_path), timeout=5)
+            conn.row_factory = sqlite3.Row
+            try:
+                # Test DB connectivity
+                conn.execute("SELECT 1").fetchone()
 
-        result = await db.execute(
-            text(
-                "SELECT MAX(timestamp) FROM signals "
-                "WHERE symbol = 'GBPUSD'"
-            )
-        )
-        last_prediction = result.scalar_one_or_none()
-    except Exception:
-        model_status = "unavailable"
+                # Check market data
+                row = conn.execute(
+                    "SELECT MAX(timestamp) FROM market_candles WHERE symbol = 'GBPUSD'"
+                ).fetchone()
+                last_market_update = row[0] if row else None
+                if last_market_update is None:
+                    market_file = settings.project_root / "data" / "parquet" / "GBPUSD_M15.parquet"
+                    if market_file.exists():
+                        try:
+                            df = pd.read_parquet(market_file)
+                            if not df.empty:
+                                last_market_update = pd.to_datetime(df["timestamp"]).max().to_pydatetime()
+                                market_status = "healthy"
+                            else:
+                                market_status = "no_data"
+                        except Exception:
+                            market_status = "no_data"
+                    else:
+                        market_status = "no_data"
+                else:
+                    market_status = "healthy"
+
+                # Check model
+                row = conn.execute(
+                    "SELECT version FROM model_versions WHERE state = 'PRODUCTION' ORDER BY created_at DESC LIMIT 1"
+                ).fetchone()
+                model_version = row[0] if row else None
+                if model_version is None:
+                    try:
+                        bundle = ModelArtifactSaver().load_bundle()
+                        candidate = bundle.get("version") if isinstance(bundle, dict) else None
+                    except Exception:
+                        candidate = None
+                    if candidate:
+                        model_version = candidate
+                        model_status = "healthy"
+                    else:
+                        model_status = "no_model"
+                else:
+                    model_status = "healthy"
+
+                # Last prediction
+                row = conn.execute(
+                    "SELECT MAX(timestamp) FROM signals WHERE symbol = 'GBPUSD'"
+                ).fetchone()
+                last_prediction = row[0] if row else None
+
+            finally:
+                conn.close()
+
+        except Exception as e:
+            db_status = "unhealthy"
+
+        return db_status, market_status, model_status, model_version, last_market_update, last_prediction
+
+    loop = asyncio.get_running_loop()
+    db_status, market_status, model_status, model_version, last_market_update, last_prediction = \
+        await loop.run_in_executor(None, _check_db)
 
     # Overall status
     overall = "healthy"
@@ -87,7 +114,7 @@ async def health_check(db: AsyncSession = Depends(get_db)) -> HealthResponse:
         overall = "degraded"
     elif market_status not in ("healthy",):
         overall = "degraded"
-    elif model_status not in ("healthy",):
+    elif model_status not in ("healthy", "no_model"):
         overall = "degraded"
 
     return HealthResponse(

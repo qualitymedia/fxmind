@@ -15,7 +15,8 @@ from app.api.v1.router import api_v1_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
-from app.db.database import dispose_engine, init_db
+from app.db.database import dispose_engine, get_session_factory, init_db
+from app.services.data_bootstrap import seed_runtime_data
 from app.workers.live_pipeline import live_worker
 
 setup_logging()
@@ -35,6 +36,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await init_db()
     except Exception as e:
         logger.warning(f"init_db warning: {e}")
+
+    # Backfill the runtime database from the persisted parquet/model artifacts if it was
+    # created empty during the backend/frontend reorg.
+    try:
+        factory = get_session_factory()
+        async with factory() as session:
+            await seed_runtime_data(session)
+    except Exception as e:
+        logger.warning(f"runtime bootstrap warning: {e}")
 
     # Start live continuous inference worker task
     worker_task = asyncio.create_task(live_worker.start())

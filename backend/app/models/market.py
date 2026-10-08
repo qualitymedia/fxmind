@@ -39,7 +39,7 @@ class MarketCandle(Base, TimestampMixin):
         Index("ix_candle_timestamp", "timestamp"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     timeframe: Mapped[str] = mapped_column(String(10), nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -62,7 +62,7 @@ class MarketQuote(Base, TimestampMixin):
         Index("ix_quote_symbol", "symbol"),
     )
 
-    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     bid: Mapped[float] = mapped_column(Float, nullable=False)
     ask: Mapped[float] = mapped_column(Float, nullable=False)

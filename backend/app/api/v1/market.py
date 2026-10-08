@@ -25,7 +25,7 @@ async def get_market_overview(symbol: str = "GBPUSD") -> MarketOverview:
 @router.get("/{symbol}/candles", response_model=list[CandleResponse])
 async def get_market_candles(
     symbol: str = "GBPUSD",
-    timeframe: str = Query("M15", regex="^(M15|30m|H1)$"),
+    timeframe: str = Query("M15", pattern="^(M15|30m|H1)$"),
     limit: int = Query(100, ge=1, le=1000),
 ) -> list[CandleResponse]:
     """Get historical candles for chart rendering."""

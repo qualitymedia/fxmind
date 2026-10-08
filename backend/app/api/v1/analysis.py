@@ -6,6 +6,7 @@ GET /api/v1/analysis/GBPUSD/history
 
 from __future__ import annotations
 
+import asyncio
 from datetime import datetime, timezone
 from fastapi import APIRouter
 
@@ -25,16 +26,26 @@ storage = ParquetStorage()
 async def get_current_analysis(symbol: str = "GBPUSD") -> AnalysisResponse:
     """Get real-time AI analysis & trade setup for symbol."""
     symbol = symbol.upper()
-    m15_df = storage.load_candles_df(symbol, "M15")
-    h1_df = storage.load_candles_df(symbol, "H1")
-    context_dfs = {s: storage.load_candles_df(s, "M15") for s in ["EURUSD", "USDJPY", "EURGBP", "DXY"]}
 
-    signal_dict = inference_service.analyze(m15_df, context_dfs, h1_df)
+    # Run all blocking parquet loads + inference in thread pool to avoid blocking the event loop
+    loop = asyncio.get_running_loop()
+
+    def _run_inference():
+        m15_df = storage.load_candles_df(symbol, "M15")
+        h1_df = storage.load_candles_df(symbol, "H1")
+        context_dfs = {s: storage.load_candles_df(s, "M15") for s in ["EURUSD", "USDJPY", "EURGBP", "DXY"]}
+        sig = inference_service.analyze(m15_df, context_dfs, h1_df)
+        return m15_df, h1_df, sig
+
+    m15_df, h1_df, signal_dict = await loop.run_in_executor(None, _run_inference)
+
     if not signal_dict.get("id"):
         signal_dict["id"] = 1
 
-    market_overview = await market_service.get_overview(symbol)
-    cross_market = await market_service.get_cross_market_context()
+    market_overview, cross_market = await asyncio.gather(
+        market_service.get_overview(symbol),
+        market_service.get_cross_market_context(),
+    )
 
     # Calculate real H1 context metrics from H1 dataframe
     if not h1_df.empty and len(h1_df) >= 50:
@@ -43,7 +54,7 @@ async def get_current_analysis(symbol: str = "GBPUSD") -> AnalysisResponse:
         ema50 = c_h1.ewm(span=50).mean().iloc[-1]
         last_h1_close = float(c_h1.iloc[-1])
         h1_high_24 = float(h1_df.tail(24)["high"].max())
-        
+
         # Dynamic RSI 14 on H1
         delta = c_h1.diff()
         gain = delta.clip(lower=0).rolling(14).mean().iloc[-1]

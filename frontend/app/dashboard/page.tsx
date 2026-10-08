@@ -132,11 +132,7 @@ export default function DashboardPage() {
           {/* 1. Price Header */}
           <PriceHeader
             symbol="GBP/USD"
-            price={
-              market?.current_price ?? signal?.market?.atr14
-                ? market?.current_price
-                : undefined
-            }
+            price={market?.current_price}
             change={market?.change}
             changePercent={market?.change_percent}
             bid={market?.bid}
