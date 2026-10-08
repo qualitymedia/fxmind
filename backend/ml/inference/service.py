@@ -26,6 +26,7 @@ import json
 import pandas as pd
 
 from ml.artifacts.saver import ModelArtifactSaver
+from ml.data.validation import validate_market_dataframe
 from ml.features.pipeline import FeaturePipeline
 from ml.features.volume_profile import compute_volume_profile
 from ml.models.regime import RegimeDetector
@@ -112,6 +113,13 @@ class InferenceService:
         if self.current_bundle is None:
             add_system_log("SYSTEM", "Trained ML model bundle unavailable.", "ERROR")
             return self._build_no_trade(candle_ts, "AI analysis model is unavailable.")
+
+        # 2b. Fail Closed: Validate raw market data before features are built
+        validation = validate_market_dataframe(m15_df, symbol="GBPUSD", timeframe="M15")
+        if not validation.is_valid:
+            first_error = validation.error_messages[0] if validation.error_messages else "unknown market data validation issue"
+            add_system_log("DATA", f"Market data failed validation: {first_error}", "ERROR")
+            return self._build_no_trade(candle_ts, f"Market data failed validation: {first_error}")
 
         # 3. Compute Features
         schema = self.current_bundle["schema"]

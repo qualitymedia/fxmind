@@ -60,9 +60,9 @@ export default function DashboardPage() {
       : "Weak";
 
   const quickLinks = [
-    { label: "Recent Signals", href: "/signals", icon: Zap, count: signals?.length ?? 0 },
+    { label: "Signals", href: "/signals", icon: Zap },
     { label: "Performance", href: "/performance", icon: BarChart3 },
-    { label: "Activity Audit", href: "/logs", icon: Terminal, badge: "LIVE" },
+    { label: "Logs", href: "/logs", icon: Terminal },
   ];
 
   return (
@@ -247,31 +247,15 @@ export default function DashboardPage() {
                 <Link
                   key={link.href}
                   href={link.href}
-                  className="group flex items-center justify-between bg-card border border-border rounded-xl px-4 py-3 shadow-card hover:border-primary/40 transition-all text-xs"
+                  className="group flex items-center justify-between bg-card border border-border rounded-xl px-4 py-2.5 shadow-card hover:border-primary/40 transition-all text-xs"
                 >
                   <div className="flex items-center gap-2.5">
-                    <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                      <Icon className="w-4 h-4 text-primary" />
+                    <div className="w-7 h-7 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <Icon className="w-3.5 h-3.5 text-primary" />
                     </div>
-                    <div>
-                      <span className="font-semibold text-text-primary block">
-                        {link.label}
-                      </span>
-                      {link.count != null && (
-                        <span className="text-[10px] text-text-secondary">
-                          {link.count} recent
-                        </span>
-                      )}
-                    </div>
+                    <span className="font-semibold text-text-primary">{link.label}</span>
                   </div>
-                  <div className="flex items-center gap-1.5">
-                    {link.badge && (
-                      <span className="px-1.5 py-0.5 text-[9px] font-bold rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                        {link.badge}
-                      </span>
-                    )}
-                    <ArrowRight className="w-3.5 h-3.5 text-text-muted group-hover:text-primary transition-colors" />
-                  </div>
+                  <ArrowRight className="w-3.5 h-3.5 text-text-muted group-hover:text-primary transition-colors" />
                 </Link>
               );
             })}

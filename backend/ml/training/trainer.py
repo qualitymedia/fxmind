@@ -14,6 +14,7 @@ from ml.artifacts.saver import ModelArtifactSaver
 from ml.backtest.engine import EventDrivenBacktester
 from ml.calibration.calibrator import ProbabilityCalibrator
 from ml.data.storage import ParquetStorage
+from ml.data.validation import validate_market_dataframe
 from ml.features.pipeline import FeaturePipeline
 from ml.features.schema import FeatureSchema
 from ml.labels.triple_barrier import compute_triple_barrier_labels
@@ -49,11 +50,25 @@ class ModelTrainer:
         if m15_df.empty:
             raise ValueError(f"No parquet data found for {symbol} {timeframe}.")
 
+        validation_report = validate_market_dataframe(m15_df, symbol=symbol, timeframe=timeframe, max_gap_hours=24)
+        if not validation_report.is_valid:
+            raise ValueError(f"Market data validation failed for {symbol} {timeframe}: {validation_report.error_messages[0]}")
+
         h1_df = storage.load_candles_df(symbol, "H1")
+        if not h1_df.empty:
+            h1_validation = validate_market_dataframe(h1_df, symbol=symbol, timeframe="H1", max_gap_hours=24)
+            if not h1_validation.is_valid:
+                raise ValueError(f"H1 market data validation failed for {symbol}: {h1_validation.error_messages[0]}")
+
         context_dfs = {
             s: storage.load_candles_df(s, "M15")
             for s in ["EURUSD", "USDJPY", "EURGBP", "DXY"]
         }
+        for ctx_symbol, ctx_df in context_dfs.items():
+            if not ctx_df.empty:
+                ctx_report = validate_market_dataframe(ctx_df, symbol=ctx_symbol, timeframe="M15", max_gap_hours=24)
+                if not ctx_report.is_valid:
+                    raise ValueError(f"Context data validation failed for {ctx_symbol}: {ctx_report.error_messages[0]}")
 
         # 2. Features
         pipeline = FeaturePipeline()
