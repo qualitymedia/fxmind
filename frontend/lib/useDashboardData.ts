@@ -93,6 +93,8 @@ export interface PaperPosition {
   opened_at: string;
   closed_at?: string;
   close_reason?: string;
+  trade_mode?: string;
+  is_scrap_trade?: boolean;
 }
 
 export interface PaperSummaryData {
@@ -123,6 +125,8 @@ export interface TradeHistoryEntry {
   model_confidence: number;
   regime: string | null;
   session: string | null;
+  trade_mode?: string;
+  is_scrap_trade?: boolean;
 }
 
 export interface DashboardData {

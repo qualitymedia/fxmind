@@ -29,10 +29,10 @@ export function SignalCard({ direction = "LONG", status = "ACTIVE", strategyType
   const stratInfo = strategyType ? STRATEGY_LABELS[strategyType] : null;
 
   return (
-    <div className="bg-card border border-border rounded-xl p-3 shadow-card flex items-center justify-between">
+    <div className="min-h-[108px] bg-card border border-border rounded-xl p-2.5 shadow-card flex items-center justify-between">
       <div className="min-w-0 flex-1">
-        <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider block">
-          Signal Status
+        <span className="text-[9px] font-bold text-text-secondary uppercase tracking-wider block">
+          Signal
         </span>
         <div className="flex items-center gap-2 mt-0.5">
           <span className={`text-base font-bold font-display ${colorClass}`}>
@@ -43,12 +43,12 @@ export function SignalCard({ direction = "LONG", status = "ACTIVE", strategyType
           )}
         </div>
         {stratInfo ? (
-          <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border mt-1 inline-block ${stratInfo.color}`}>
+          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border mt-1 inline-block ${stratInfo.color}`}>
             {stratInfo.label}
           </span>
         ) : (
-          <span className="text-[10px] text-text-secondary block">
-            {isNoTrade ? "Gates Active" : "Setup Active"}
+          <span className="text-[9px] text-text-secondary block">
+            {isNoTrade ? "Gates" : "Ready"}
           </span>
         )}
       </div>

@@ -6,27 +6,22 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Zap,
-  Activity,
   Calendar,
   BarChart3,
   Settings,
   Bot,
   Sparkles,
   ChevronRight,
-  Send,
-  ExternalLink,
   SlidersHorizontal,
+  type LucideIcon,
 } from "lucide-react";
 import { BrokerModal, AccountInfo } from "@/components/broker/BrokerModal";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const TELEGRAM_COMMUNITY_URL = "https://t.me/FXMindOfficial";
 
-const NAV_ITEMS = [
+const NAV_ITEMS: Array<{ name: string; href: string; icon: LucideIcon; badge?: string }> = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Signals", href: "/signals", icon: Zap },
-  { name: "Community", href: "/community", icon: Send, badge: "VIP" },
-  { name: "Activity", href: "/logs", icon: Activity, badge: "LIVE" },
   { name: "Calendar", href: "/calendar", icon: Calendar },
   { name: "Performance", href: "/performance", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },
@@ -86,7 +81,7 @@ export function Sidebar() {
 
   return (
     <>
-      <aside className="w-60 bg-card border-r border-border h-screen sticky top-0 flex flex-col justify-between p-3.5 flex-shrink-0 z-30 select-none overflow-hidden">
+      <aside className="hidden md:flex w-60 bg-card border-r border-border h-screen sticky top-0 flex-col justify-between p-3.5 flex-shrink-0 z-30 select-none overflow-hidden">
         {/* Top: Brand & Navigation */}
         <div className="space-y-3.5">
           {/* Brand */}
@@ -142,33 +137,9 @@ export function Sidebar() {
           </nav>
         </div>
 
-        {/* Lower Sidebar Section — Redesigned with Community + Broker Cards */}
+        {/* Lower Sidebar Section */}
         <div className="space-y-2 pt-2.5 border-t border-border">
-          
-          {/* 1. Join Telegram Community Card */}
-          <a
-            href={TELEGRAM_COMMUNITY_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="p-2.5 rounded-xl bg-gradient-to-r from-[#229ED9]/15 via-card to-card border border-[#229ED9]/30 hover:border-[#229ED9]/60 transition-all flex items-center justify-between group shadow-sm"
-          >
-            <div className="flex items-center gap-2 min-w-0">
-              <div className="w-6 h-6 rounded-lg bg-[#229ED9] text-white flex items-center justify-center flex-shrink-0 shadow-sm shadow-[#229ED9]/30">
-                <Send className="w-3.5 h-3.5" />
-              </div>
-              <div className="min-w-0">
-                <span className="text-[11px] font-bold text-text-primary block leading-tight truncate">
-                  Join Community
-                </span>
-                <span className="text-[9px] text-[#229ED9] font-semibold block truncate">
-                  Telegram VIP Feed
-                </span>
-              </div>
-            </div>
-            <ExternalLink className="w-3.5 h-3.5 text-text-muted group-hover:text-[#229ED9] group-hover:translate-x-0.5 transition-all flex-shrink-0" />
-          </a>
-
-          {/* 2. Broker Auto-Pilot Card — Marked Coming Soon */}
+          {/* Broker Auto-Pilot Card */}
           <div
             onClick={() => router.push("/trade")}
             className="p-2.5 rounded-xl bg-gradient-to-b from-primary/10 via-card to-card border border-primary/25 hover:border-primary/50 cursor-pointer transition-all shadow-sm group"
@@ -218,6 +189,29 @@ export function Sidebar() {
       </aside>
 
       {/* Broker Management Modal */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-card/95 backdrop-blur-md px-2 py-2">
+        <div className="grid grid-cols-5 gap-1">
+          {NAV_ITEMS.map((item) => {
+            const isActive = pathname === item.href || (item.href === "/dashboard" && pathname === "/");
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.name}
+                href={item.href}
+                className={`flex flex-col items-center justify-center rounded-xl px-1 py-2 text-[10px] transition-colors ${
+                  isActive
+                    ? "bg-primary/10 text-primary"
+                    : "text-text-secondary hover:text-text-primary"
+                }`}
+              >
+                <Icon className="w-4 h-4 mb-1" />
+                <span className="truncate max-w-[52px] text-center">{item.name}</span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+
       <BrokerModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}

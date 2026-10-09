@@ -354,8 +354,15 @@ class BrokerExecutionService:
             "broker_connected": self.is_connected or bool(self.account_info),
         }
 
-    def calculate_dynamic_lot_size(self, stop_loss: Optional[float] = None, entry_price: Optional[float] = None, risk_pct: float = 0.01) -> float:
-        """Calculate risk-managed lot size based on connected MT5 account equity (1% risk default)."""
+    def calculate_dynamic_lot_size(
+        self,
+        stop_loss: Optional[float] = None,
+        entry_price: Optional[float] = None,
+        risk_pct: float = 0.01,
+        trade_type: Optional[str] = None,
+        is_scrap_trade: bool = False,
+    ) -> float:
+        """Calculate risk-managed lot size based on connected MT5 account equity and trade type."""
         equity = 3000.0
         if self.account_info and isinstance(self.account_info.get("equity"), (int, float)):
             equity = float(self.account_info["equity"])
@@ -366,10 +373,19 @@ class BrokerExecutionService:
             if computed_pips > 0:
                 sl_pips = computed_pips
 
-        risk_amount = equity * risk_pct  # e.g. $30 on $3,000 equity
-        # 1.0 Lot GBPUSD = $10.00 / pip
+        trade_name = str(trade_type or "").upper()
+        if is_scrap_trade or "SCRAP" in trade_name:
+            effective_risk_pct = min(risk_pct, 0.003)
+            lower_bound = 0.01
+            upper_bound = 0.25
+        else:
+            effective_risk_pct = min(max(risk_pct, 0.003), 0.02)
+            lower_bound = 0.05
+            upper_bound = 2.0
+
+        risk_amount = equity * effective_risk_pct
         computed_lots = risk_amount / (sl_pips * 10.0)
-        clamped_lots = round(max(0.05, min(2.0, computed_lots)), 2)
+        clamped_lots = round(max(lower_bound, min(upper_bound, computed_lots)), 2)
         return clamped_lots
 
     def auto_execute_signal(self, signal: dict) -> dict:
@@ -391,9 +407,17 @@ class BrokerExecutionService:
         tp = trade.get("take_profit")
         entry_low = trade.get("entry_low")
         entry_high = trade.get("entry_high")
+        trade_type = trade.get("strategy_type") or signal.get("strategy_type") or "TREND_FOLLOWING"
+        is_scrap = bool(signal.get("is_scrap_trade") or trade.get("is_scrap_trade") or "SCRAP" in str(trade_type).upper())
 
         entry_price = ((entry_low or 0) + (entry_high or 0)) / 2.0 if entry_low and entry_high else (entry_low or entry_high or None)
-        auto_lot_size = self.calculate_dynamic_lot_size(stop_loss=sl, entry_price=entry_price, risk_pct=0.01)
+        auto_lot_size = self.calculate_dynamic_lot_size(
+            stop_loss=sl,
+            entry_price=entry_price,
+            risk_pct=0.01,
+            trade_type=trade_type,
+            is_scrap_trade=is_scrap,
+        )
 
         result = self.execute_order(
             symbol=symbol,
@@ -408,6 +432,79 @@ class BrokerExecutionService:
         else:
             logger.warning(f"[BrokerService] AI auto-trade failed: {result.get('error')}")
         return result
+
+    def check_and_close_open_positions(
+        self,
+        current_price: Optional[float] = None,
+        high: Optional[float] = None,
+        low: Optional[float] = None,
+    ) -> dict:
+        """Close any open MT5 positions that hit their TP or SL during the current tick."""
+        try:
+            import MetaTrader5 as mt5
+            if not mt5.initialize():
+                return {"closed": 0, "positions_checked": 0, "error": "MT5 not initialized"}
+
+            positions = mt5.positions_get() or []
+            close_count = 0
+            checked = 0
+            closed_tickets = []
+
+            for pos in positions:
+                checked += 1
+                if pos.tp is None or pos.sl is None:
+                    continue
+
+                is_buy = pos.type == getattr(mt5, "ORDER_TYPE_BUY", 0)
+                price = current_price
+                if price is None:
+                    tick = mt5.symbol_info_tick(pos.symbol)
+                    if tick is None:
+                        continue
+                    price = (tick.ask + tick.bid) / 2.0
+
+                if is_buy:
+                    hit_tp = (high is not None and high >= pos.tp) or (price is not None and price >= pos.tp)
+                    hit_sl = (low is not None and low <= pos.sl) or (price is not None and price <= pos.sl)
+                else:
+                    hit_tp = (low is not None and low <= pos.tp) or (price is not None and price <= pos.tp)
+                    hit_sl = (high is not None and high >= pos.sl) or (price is not None and price >= pos.sl)
+
+                if not (hit_tp or hit_sl):
+                    continue
+
+                close_method = getattr(mt5, "Close", None)
+                if callable(close_method):
+                    result = close_method(pos.ticket)
+                else:
+                    close_type = mt5.ORDER_TYPE_SELL if is_buy else mt5.ORDER_TYPE_BUY
+                    request = {
+                        "action": mt5.TRADE_ACTION_DEAL,
+                        "symbol": pos.symbol,
+                        "volume": float(pos.volume),
+                        "type": close_type,
+                        "price": float(price or pos.price_current),
+                        "deviation": 20,
+                        "magic": 108821,
+                        "comment": "Auto close on TP/SL",
+                        "type_time": mt5.ORDER_TIME_GTC,
+                        "type_filling": mt5.ORDER_FILLING_FOK,
+                        "position_ticket": pos.ticket,
+                    }
+                    result = mt5.order_send(request)
+
+                if result is not None:
+                    close_count += 1
+                    closed_tickets.append({"ticket": pos.ticket, "symbol": pos.symbol, "reason": "TP" if hit_tp else "SL"})
+
+            return {
+                "closed": close_count,
+                "positions_checked": checked,
+                "closed_tickets": closed_tickets,
+            }
+        except Exception as e:
+            logger.warning(f"[BrokerService] Position close scan failed: {e}")
+            return {"closed": 0, "positions_checked": 0, "error": str(e)}
 
     def get_open_positions(self) -> dict:
         """Fetch all currently open positions from MT5."""

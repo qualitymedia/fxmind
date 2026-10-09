@@ -29,11 +29,10 @@ export function AIBiasCard({ bias = "BULLISH", confidence = 0.68 }: AIBiasCardPr
   const dash = (percent / 100) * circ;
 
   return (
-    <div className="bg-card border border-border rounded-xl p-3 shadow-card flex items-center justify-between gap-3">
-      {/* Left: bias label */}
+    <div className="min-h-[108px] bg-card border border-border rounded-xl p-2.5 shadow-card flex items-center justify-between gap-2.5">
       <div className="min-w-0 flex-1">
-        <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider block">
-          AI Market Bias
+        <span className="text-[9px] font-bold text-text-secondary uppercase tracking-wider block">
+          AI Bias
         </span>
         <div className="flex items-center gap-1.5 mt-0.5">
           <span className={`text-base font-bold font-display tracking-tight ${colorClass}`}>
@@ -43,13 +42,12 @@ export function AIBiasCard({ bias = "BULLISH", confidence = 0.68 }: AIBiasCardPr
             <Icon className="w-3.5 h-3.5" />
           </div>
         </div>
-        <span className={`text-[10px] font-bold mt-1 block ${tier.text}`}>
-          {tier.label} CONFIDENCE
+        <span className={`text-[9px] font-bold mt-1 block ${tier.text}`}>
+          {tier.label}
         </span>
       </div>
 
-      {/* Right: radial confidence ring */}
-      <div className="flex-shrink-0 relative w-12 h-12">
+      <div className="flex-shrink-0 relative w-11 h-11">
         <svg viewBox="0 0 40 40" className="w-full h-full -rotate-90">
           {/* Track */}
           <circle

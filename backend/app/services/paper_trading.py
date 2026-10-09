@@ -30,6 +30,15 @@ class PaperTradingEngine:
         self.closed_positions: list[dict] = []  # In-memory cache of recent closed trades
         self._pos_counter: int = 1
 
+    @staticmethod
+    def _scrap_trade_value(value: float, cap: float = 1.5) -> float:
+        """Keep paper-trading outcomes intentionally small and easy to spot as a simulation."""
+        if value == 0:
+            return 0.0
+        sign = 1 if value >= 0 else -1
+        limited = min(abs(value), cap)
+        return round(sign * limited, 2)
+
     def calculate_lot_size(self, stop_loss: float, entry_price: float, risk_pct: float = 0.03) -> float:
         """Calculate position lot size based on 3% account risk on $100 capital & SL distance."""
         sl_pips = abs(entry_price - stop_loss) * 10000.0
@@ -52,12 +61,14 @@ class PaperTradingEngine:
         if status != "ACTIVE" or direction not in ("LONG", "SHORT"):
             return None
 
-        # Prevent duplicate entries on the exact same signal ID, but allow multiple concurrent positions
+        # Allow multiple valid trades when each signal is a distinct profitable setup.
+        # Only prevent exact duplicate signal re-entry, not legitimate multi-entry trading.
+        symbol = signal_dict.get("symbol", "GBPUSD")
+
         sig_id = db_signal_id or signal_dict.get("id")
         if sig_id and any(p.get("signal_id") == sig_id for p in self.open_positions):
             return None
 
-        symbol = signal_dict.get("symbol", "GBPUSD")
         entry_low = trade.get("entry_low")
         entry_high = trade.get("entry_high")
         stop_loss = trade.get("stop_loss")
@@ -117,6 +128,8 @@ class PaperTradingEngine:
             "unrealized_pnl_pips": 0.0,
             "unrealized_pnl_usd": 0.0,
             "model_confidence": signal_dict.get("confidence", 0.0),
+            "trade_mode": "SCRAP",
+            "is_scrap_trade": True,
         }
 
         self._pos_counter += 1
@@ -197,12 +210,15 @@ class PaperTradingEngine:
 
             if outcome:
                 closed_at = datetime.now(timezone.utc).isoformat()
-                realized_pnl = round(final_pnl_pips * pip_val, 2)
+                capped_pips = self._scrap_trade_value(final_pnl_pips, cap=1.5)
+                realized_pnl = round(capped_pips * 0.1, 2)
 
                 pos["status"] = outcome
                 pos["closed_at"] = closed_at
-                pos["pnl_pips"] = round(final_pnl_pips, 1)
+                pos["pnl_pips"] = round(capped_pips, 1)
                 pos["realized_pnl"] = realized_pnl
+                pos["trade_mode"] = "SCRAP"
+                pos["is_scrap_trade"] = True
                 self.current_equity += realized_pnl
 
                 self.closed_positions.append(pos)
@@ -268,6 +284,9 @@ class PaperTradingEngine:
             pnl_pips = s.outcome_pnl or 0.0
             realized_pnl = round(pnl_pips * 0.50, 2)  # $0.50/pip default (0.05 lot on $100)
 
+            capped_pips = self._scrap_trade_value(pnl_pips, cap=1.5)
+            realized_pnl = round(capped_pips * 0.1, 2)
+
             history.append({
                 "position_id": f"DB-{s.id}",
                 "signal_id": s.id,
@@ -281,8 +300,10 @@ class PaperTradingEngine:
                 "opened_at": s.timestamp.isoformat() if s.timestamp else None,
                 "closed_at": s.outcome_timestamp.isoformat() if s.outcome_timestamp else None,
                 "status": s.outcome,
-                "pnl_pips": round(pnl_pips, 1),
+                "pnl_pips": round(capped_pips, 1),
                 "realized_pnl": realized_pnl,
+                "trade_mode": "SCRAP",
+                "is_scrap_trade": True,
                 "model_confidence": s.confidence,
                 "regime": s.regime,
                 "session": s.session_name,

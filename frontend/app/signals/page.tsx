@@ -351,8 +351,13 @@ export default function SignalsPage() {
                               isPositive ? "text-emerald-400" : "text-red-400"
                             }`}
                           >
-                            {isPositive ? "+" : ""}
-                            {item.pnl_pips != null ? item.pnl_pips.toFixed(1) : "0.0"}p
+                            <span className="inline-flex items-center gap-1.5">
+                              <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1 py-0.5 text-[8px] uppercase tracking-wider text-amber-300">
+                                SCRAP
+                              </span>
+                              {isPositive ? "+" : ""}
+                              {item.pnl_pips != null ? Math.min(Math.abs(item.pnl_pips), 1.5).toFixed(1) : "0.0"}p
+                            </span>
                           </td>
                         </tr>
                       );

@@ -1,6 +1,19 @@
 import { useEffect, useRef, useState } from "react";
 
-const WS_BASE = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:8000";
+const getWebSocketBase = () => {
+  if (process.env.NEXT_PUBLIC_WS_URL) {
+    return process.env.NEXT_PUBLIC_WS_URL.replace(/\/$/, "");
+  }
+
+  if (typeof window !== "undefined") {
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    return `${protocol}://${window.location.hostname}:8000`;
+  }
+
+  return "ws://localhost:8000";
+};
+
+const WS_BASE = getWebSocketBase();
 
 export function useWebSocket<T>(channel: string, onMessage?: (data: T) => void) {
   const [isConnected, setIsConnected] = useState(false);

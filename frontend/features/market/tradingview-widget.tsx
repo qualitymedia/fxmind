@@ -24,12 +24,11 @@ function TradingViewWidgetComponent({
   )}`;
 
   return (
-    <div className="w-full h-[520px] rounded-xl overflow-hidden border border-border bg-[#131722] relative">
+    <div className="w-full h-[320px] sm:h-[420px] rounded-xl overflow-hidden border border-border bg-[#131722] relative">
       <iframe
         title="TradingView Live Stream Chart"
         src={iframeSrc}
         className="w-full h-full border-0"
-        
         scrolling="no"
       />
     </div>

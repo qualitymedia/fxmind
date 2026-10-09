@@ -10,10 +10,8 @@ import {
   Sliders,
   Save,
   CheckCircle2,
-  Send,
   Bot,
   Terminal,
-  ExternalLink,
   Zap,
   Sparkles,
 } from "lucide-react";
@@ -26,35 +24,9 @@ export default function SettingsPage() {
   const [baseCapital] = useState<number>(100.0);
   const [savedStatus, setSavedStatus] = useState<boolean>(false);
 
-  // Telegram test state
-  const [tgTesting, setTgTesting] = useState<boolean>(false);
-  const [tgTestMessage, setTgTestMessage] = useState<string | null>(null);
-
-  const TELEGRAM_COMMUNITY_URL = "https://t.me/FXMindOfficial";
-
   const handleSaveParameters = () => {
     setSavedStatus(true);
     setTimeout(() => setSavedStatus(false), 3000);
-  };
-
-  const handleSendTestPing = async () => {
-    setTgTesting(true);
-    setTgTestMessage(null);
-    try {
-      const res = await fetch("http://localhost:8000/api/v1/notifications/telegram/test", {
-        method: "POST",
-      });
-      const data = await res.json();
-      if (data.success) {
-        setTgTestMessage("Institutional alert successfully dispatched to the Telegram Community!");
-      } else {
-        setTgTestMessage(data.error || "Delivery failed.");
-      }
-    } catch (err: any) {
-      setTgTestMessage(err.message || "Request failed.");
-    } finally {
-      setTgTesting(false);
-    }
   };
 
   return (
@@ -88,64 +60,7 @@ export default function SettingsPage() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Left 2 Cols: Telegram Community & Risk Model Parameters */}
             <div className="lg:col-span-2 space-y-6">
-              
-              {/* 1. Official Telegram VIP Community Broadcast */}
-              <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-4">
-                <div className="flex items-center justify-between flex-wrap gap-2">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-[#229ED9]/15 border border-[#229ED9]/30 flex items-center justify-center text-[#229ED9]">
-                      <Send className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h2 className="text-sm font-bold font-display text-text-primary">
-                        Official Telegram Signal Broadcast
-                      </h2>
-                      <span className="text-xs text-text-secondary block">
-                        Centralized system bot automatically broadcasts active setups to the community.
-                      </span>
-                    </div>
-                  </div>
-
-                  <span className="px-3 py-1 rounded-full font-mono text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
-                    BROADCAST ACTIVE
-                  </span>
-                </div>
-
-                <div className="p-4 rounded-xl bg-background border border-border space-y-3 text-xs">
-                  <p className="text-text-secondary leading-relaxed">
-                    Users do not need to configure any bot tokens or chat IDs. All high-confidence setups, session reviews, and trade updates are delivered straight to our official Telegram channel.
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-3 pt-1">
-                    <a
-                      href={TELEGRAM_COMMUNITY_URL}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="px-4 py-2 rounded-xl bg-[#229ED9] hover:bg-[#1e8ec3] text-white text-xs font-bold flex items-center gap-2 transition-all shadow-md active:scale-95"
-                    >
-                      <Send className="w-3.5 h-3.5" /> Join Telegram Channel <ExternalLink className="w-3 h-3 opacity-80" />
-                    </a>
-
-                    <button
-                      onClick={handleSendTestPing}
-                      disabled={tgTesting}
-                      className="px-4 py-2 bg-card hover:bg-card-secondary border border-border text-text-primary rounded-xl text-xs font-mono font-semibold transition-all flex items-center gap-1.5"
-                    >
-                      {tgTesting ? "Dispatching..." : "Send Test Broadcast"}
-                    </button>
-                  </div>
-
-                  {tgTestMessage && (
-                    <div className="p-3 rounded-lg bg-card-secondary border border-border text-[11px] font-mono text-emerald-400">
-                      {tgTestMessage}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* 2. Signal Generation & Risk Thresholds */}
               <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-5">
                 <h2 className="text-sm font-bold font-display text-text-primary flex items-center gap-2">
                   <Sliders className="w-4 h-4 text-primary" />

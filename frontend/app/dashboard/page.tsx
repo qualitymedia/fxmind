@@ -23,7 +23,6 @@ import {
   ArrowRight,
   Zap,
   BarChart3,
-  Terminal,
 } from "lucide-react";
 
 export default function DashboardPage() {
@@ -62,53 +61,54 @@ export default function DashboardPage() {
   const quickLinks = [
     { label: "Signals", href: "/signals", icon: Zap },
     { label: "Performance", href: "/performance", icon: BarChart3 },
-    { label: "Logs", href: "/logs", icon: Terminal },
   ];
 
   return (
-    <div className="flex min-h-screen bg-background text-text-primary">
-      <Sidebar />
+    <div className="min-h-screen bg-[#eef3f7] md:bg-background text-text-primary">
+      <div className="mx-auto w-full md:max-w-none">
+        <div className="md:flex md:min-h-screen">
+          <Sidebar />
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden">
-        <Header />
+          <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden md:rounded-none">
+            <Header />
 
-        {/* Live Data Status Bar */}
-        <div className="px-5 py-1.5 flex items-center justify-between border-b border-border bg-card text-xs">
-          <div className="flex items-center gap-3">
-            {loading ? (
-              <span className="flex items-center gap-1.5 text-text-muted">
-                <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                Fetching live data…
+            {/* Live Data Status Bar */}
+            <div className="px-3 py-1.5 sm:px-5 flex items-center justify-between border-b border-border bg-card text-xs">
+              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                {loading ? (
+                  <span className="flex items-center gap-1.5 text-text-muted truncate">
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                    <span className="hidden sm:inline">Fetching live data…</span>
+                  </span>
+                ) : error ? (
+                  <span className="flex items-center gap-1.5 text-negative font-medium truncate">
+                    <WifiOff className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Backend unreachable</span>
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1.5 text-positive font-medium truncate">
+                    <Wifi className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Live — polling 15 s</span>
+                  </span>
+                )}
+                {lastRefresh && (
+                  <span className="text-text-muted flex items-center gap-2 min-w-0">
+                    <span className="hidden sm:inline">Updated: {lastRefresh.toLocaleTimeString()}</span>
+                    <button
+                      onClick={() => refetch()}
+                      className="px-2 py-0.5 rounded bg-card-secondary hover:bg-border border border-border text-[10px] font-semibold text-text-primary flex items-center gap-1 transition-colors"
+                      title="Manual Sync"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
+                      <span className="hidden sm:inline">Sync</span>
+                    </button>
+                  </span>
+                )}
+              </div>
+              <span className="font-mono text-text-secondary text-[10px] sm:text-[11px] hidden sm:inline">
+                Engine: FXMind Alpha v2
               </span>
-            ) : error ? (
-              <span className="flex items-center gap-1.5 text-negative font-medium">
-                <WifiOff className="w-3.5 h-3.5" />
-                Backend unreachable
-              </span>
-            ) : (
-              <span className="flex items-center gap-1.5 text-positive font-medium">
-                <Wifi className="w-3.5 h-3.5" />
-                Live — polling 15 s
-              </span>
-            )}
-            {lastRefresh && (
-              <span className="text-text-muted flex items-center gap-2">
-                <span>Updated: {lastRefresh.toLocaleTimeString()}</span>
-                <button
-                  onClick={() => refetch()}
-                  className="px-2 py-0.5 rounded bg-card-secondary hover:bg-border border border-border text-[10px] font-semibold text-text-primary flex items-center gap-1 transition-colors"
-                  title="Manual Sync"
-                >
-                  <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
-                  Sync
-                </button>
-              </span>
-            )}
-          </div>
-          <span className="font-mono text-text-secondary text-[11px]">
-            Engine: FXMind Alpha v2
-          </span>
-        </div>
+            </div>
 
         {/* Banners */}
         {isWeekendClosed && (
@@ -128,25 +128,29 @@ export default function DashboardPage() {
         )}
 
         {/* Main Dashboard Layout */}
-        <main className="p-4 md:p-5 space-y-4 max-w-[1800px] w-full mx-auto">
-          {/* 1. Price Header */}
-          <PriceHeader
-            symbol="GBP/USD"
-            price={market?.current_price}
-            change={market?.change}
-            changePercent={market?.change_percent}
-            bid={market?.bid}
-            ask={market?.ask}
-            spread={market?.spread}
-            timeframe={timeframe}
-            onTimeframeChange={setTimeframe}
-            session={market?.session}
-            high24={market?.high_24h}
-            low24={market?.low_24h}
-          />
+        <main className="p-2.5 sm:p-4 md:p-5 space-y-3 md:space-y-4 max-w-[1800px] w-full mx-auto">
+          <div className="md:rounded-none md:shadow-none md:border-0 md:bg-transparent md:p-0">
+            <div className="rounded-[1.5rem] border border-border/70 bg-[#f6f8fb] shadow-[0_10px_25px_rgba(15,23,42,0.06)] overflow-hidden">
+              {/* 1. Price Header */}
+              <PriceHeader
+                symbol="GBP/USD"
+                price={market?.current_price}
+                change={market?.change}
+                changePercent={market?.change_percent}
+                bid={market?.bid}
+                ask={market?.ask}
+                spread={market?.spread}
+                timeframe={timeframe}
+                onTimeframeChange={setTimeframe}
+                session={market?.session}
+                high24={market?.high_24h}
+                low24={market?.low_24h}
+              />
+            </div>
+          </div>
 
-          {/* 2. Top KPI Row — 3 Core Cards (AI Bias, Regime, Signal Status) */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          {/* 2. Top KPI Row — 4 Core Cards (AI Bias, Regime, Signal Status, Setup Quality) */}
+          <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3.5">
             <AIBiasCard
               bias={(signal?.bias as any) ?? "NEUTRAL"}
               confidence={signal?.confidence ?? 0.3333}
@@ -156,6 +160,16 @@ export default function DashboardPage() {
               direction={(signal?.trade?.direction as any) ?? null}
               status={signal?.trade?.status ?? "NO_TRADE"}
               strategyType={(signal?.trade as any)?.strategy_type ?? null}
+            />
+            <SetupQualityCard
+              quality={
+                signal?.trade?.status === "ACTIVE" ? quality : "Key Watch Levels"
+              }
+              riskReward={signal?.trade?.risk_reward ?? null}
+              entryLow={signal?.trade?.entry_low ?? undefined}
+              entryHigh={signal?.trade?.entry_high ?? undefined}
+              stopLoss={signal?.trade?.stop_loss ?? undefined}
+              takeProfit={signal?.trade?.take_profit ?? undefined}
             />
           </div>
 
@@ -212,17 +226,6 @@ export default function DashboardPage() {
                 riskReward={signal?.trade?.risk_reward ?? undefined}
               />
 
-              {/* Setup Quality Card */}
-              <SetupQualityCard
-                quality={
-                  signal?.trade?.status === "ACTIVE" ? quality : "Key Watch Levels"
-                }
-                riskReward={signal?.trade?.risk_reward ?? null}
-                entryLow={signal?.trade?.entry_low ?? undefined}
-                entryHigh={signal?.trade?.entry_high ?? undefined}
-                stopLoss={signal?.trade?.stop_loss ?? undefined}
-                takeProfit={signal?.trade?.take_profit ?? undefined}
-              />
             </div>
           </div>
 
@@ -261,6 +264,8 @@ export default function DashboardPage() {
             })}
           </div>
         </main>
+          </div>
+        </div>
       </div>
     </div>
   );

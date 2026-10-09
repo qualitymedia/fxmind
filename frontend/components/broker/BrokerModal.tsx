@@ -13,12 +13,9 @@ import {
   Power,
   Sparkles,
   X,
-  ExternalLink,
-  Send,
 } from "lucide-react";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
-const TELEGRAM_COMMUNITY_URL = "https://t.me/FXMindOfficial";
 
 export interface AccountInfo {
   login: number;
@@ -205,68 +202,6 @@ export function BrokerModal({
           >
             <X size={18} />
           </button>
-        </div>
-
-        {/* Telegram Community Quick Link Banner */}
-        <div
-          style={{
-            padding: "14px 16px",
-            borderRadius: "16px",
-            background: "linear-gradient(90deg, rgba(34, 158, 217, 0.15), rgba(15, 23, 42, 0.7))",
-            border: "1px solid rgba(34, 158, 217, 0.35)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            gap: "12px",
-          }}
-        >
-          <div style={{ display: "flex", alignItems: "center", gap: "10px", minWidth: 0 }}>
-            <div
-              style={{
-                width: "32px",
-                height: "32px",
-                borderRadius: "10px",
-                background: "#229ED9",
-                color: "#ffffff",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-                boxShadow: "0 0 12px rgba(34, 158, 217, 0.4)",
-              }}
-            >
-              <Send size={16} />
-            </div>
-            <div style={{ minWidth: 0 }}>
-              <p style={{ margin: 0, fontSize: "13px", fontWeight: 700, color: "#f9fafb" }}>
-                Official Telegram Community
-              </p>
-              <p style={{ margin: "2px 0 0", fontSize: "11px", color: "#9ca3af" }}>
-                Join for live setup broadcasts &amp; discussions
-              </p>
-            </div>
-          </div>
-          <a
-            href={TELEGRAM_COMMUNITY_URL}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{
-              padding: "7px 14px",
-              borderRadius: "10px",
-              background: "#229ED9",
-              color: "#ffffff",
-              fontWeight: 700,
-              fontSize: "12px",
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              textDecoration: "none",
-              boxShadow: "0 4px 12px rgba(34, 158, 217, 0.3)",
-              flexShrink: 0,
-            }}
-          >
-            Join <ExternalLink size={13} />
-          </a>
         </div>
 
         {isConnected && account ? (

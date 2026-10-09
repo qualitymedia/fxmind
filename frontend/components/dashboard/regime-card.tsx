@@ -46,19 +46,16 @@ export function RegimeCard({ regime = "RANGING" }: RegimeCardProps) {
   const Icon = cfg.icon;
 
   return (
-    <div className={`bg-card border ${cfg.border} rounded-xl p-3 shadow-card flex items-center justify-between`}>
+    <div className={`min-h-[108px] bg-card border ${cfg.border} rounded-xl p-2.5 shadow-card flex items-center justify-between`}>
       <div className="min-w-0 flex-1">
-        <span className="text-[10px] font-bold text-text-secondary uppercase tracking-wider block">
-          Market Regime
+        <span className="text-[9px] font-bold text-text-secondary uppercase tracking-wider block">
+          Regime
         </span>
         <span className={`text-base font-bold font-display block mt-0.5 ${cfg.color}`}>
           {regime}
         </span>
-        <span className="text-[10px] text-text-secondary block leading-tight">
+        <span className="text-[9px] text-text-secondary block leading-tight">
           {cfg.subtitle}
-        </span>
-        <span className={`text-[10px] font-semibold mt-1 block ${cfg.color} opacity-80`}>
-          → {cfg.hint}
         </span>
       </div>
 

@@ -110,7 +110,7 @@ export function MainChart({
         timeVisible: true,
         secondsVisible: false,
       },
-      height: 440,
+      height: 320,
     });
 
     chartRef.current = chart;
@@ -264,14 +264,14 @@ export function MainChart({
   }, [candles, timeframe, tradeSetup, volumeProfile, showAILayers, chartMode, startLiveTick]);
 
   return (
-    <div className="bg-card border border-border rounded-xl p-4 shadow-card">
+    <div className="bg-card border border-border rounded-xl p-2 shadow-card sm:p-3">
       {/* Chart Controls & Mode Switcher */}
-      <div className="flex items-center justify-between pb-3 mb-3 border-b border-border text-xs flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <div className="flex items-center bg-background p-1 rounded-lg border border-border">
+      <div className="flex items-center justify-between pb-2 mb-2 border-b border-border text-[10px] sm:text-xs flex-wrap gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex items-center bg-background p-0.5 rounded-lg border border-border">
             <button
               onClick={() => setChartMode("tradingview")}
-              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+              className={`flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs font-semibold rounded-md transition-colors ${
                 chartMode === "tradingview"
                   ? "bg-primary text-white shadow-sm"
                   : "text-text-secondary hover:text-text-primary"
@@ -282,7 +282,7 @@ export function MainChart({
             </button>
             <button
               onClick={() => setChartMode("ai_overlay")}
-              className={`flex items-center gap-1.5 px-3 py-1 text-xs font-semibold rounded-md transition-colors ${
+              className={`flex items-center gap-1 px-2 py-1 text-[10px] sm:text-xs font-semibold rounded-md transition-colors ${
                 chartMode === "ai_overlay"
                   ? "bg-primary text-white shadow-sm"
                   : "text-text-secondary hover:text-text-primary"
@@ -293,16 +293,16 @@ export function MainChart({
             </button>
           </div>
 
-          <span className="text-text-muted text-[11px] ml-2">
+          <span className="text-text-muted text-[11px]">
             {chartMode === "tradingview" ? "FX:GBPUSD Live WebSocket" : `GBP/USD ${timeframe}`}
           </span>
         </div>
 
         <div className="flex items-center gap-2 text-[11px]">
           {chartMode === "tradingview" ? (
-            <span className="px-2.5 py-0.5 rounded-full bg-positive/10 border border-positive/20 text-positive font-bold flex items-center gap-1">
+            <span className="px-2 py-0.5 rounded-full bg-positive/10 border border-positive/20 text-positive font-bold flex items-center gap-1">
               <span className="w-2 h-2 rounded-full bg-positive animate-pulse" />
-              TradingView Live Real-Time
+              Real-Time
             </span>
           ) : (
             <>
@@ -312,7 +312,7 @@ export function MainChart({
                 </span>
               )}
               <span className="px-2 py-0.5 rounded bg-positive/10 border border-positive/20 text-positive font-medium">
-                ● 5-Decimal Precision Active
+                ● Live
               </span>
             </>
           )}

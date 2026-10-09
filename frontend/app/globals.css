@@ -4,10 +4,23 @@
 
 @layer base {
   html {
-    font-size: 83.5%; /* Reduces overall site scale by ~18-20% so it fits comfortably on standard displays */
+    font-size: 83.5%;
+    -webkit-tap-highlight-color: transparent;
   }
+
   body {
     @apply bg-background text-text-primary font-sans antialiased selection:bg-primary/20 selection:text-primary;
+    min-height: 100vh;
+  }
+
+  @media (max-width: 767px) {
+    html {
+      font-size: 80%;
+    }
+
+    body {
+      padding-bottom: 5rem;
+    }
   }
 }
 

@@ -27,47 +27,9 @@ interface NotificationItem {
   link?: string;
 }
 
-const SAMPLE_NOTIFICATIONS: NotificationItem[] = [
-  {
-    id: "1",
-    title: "AI Auto-Trading Engine Active",
-    message: "Autonomous execution is linked and armed for high-confidence GBP/USD setups.",
-    time: "Just now",
-    type: "broker",
-    read: false,
-    link: "/trade",
-  },
-  {
-    id: "2",
-    title: "Weekend Market Status",
-    message: "Forex market is currently closed for the weekend. Live inference resumes Sunday 22:00 UTC.",
-    time: "2h ago",
-    type: "system",
-    read: false,
-  },
-  {
-    id: "3",
-    title: "Ensemble Model Calibrated",
-    message: "Multiclass XGBoost & LightGBM ensemble weights verified with 99.0% calibration.",
-    time: "4h ago",
-    type: "signal",
-    link: "/signals",
-    read: false,
-  },
-  {
-    id: "4",
-    title: "Telegram VIP Broadcast Ready",
-    message: "Instant alerts are being piped to the official FXMind Telegram community.",
-    time: "6h ago",
-    type: "system",
-    link: "/community",
-    read: false,
-  },
-];
-
 export function Header() {
   const [utcTime, setUtcTime] = useState<string>("");
-  const [notifications, setNotifications] = useState<NotificationItem[]>(SAMPLE_NOTIFICATIONS);
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [isNotifOpen, setIsNotifOpen] = useState<boolean>(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -103,9 +65,9 @@ export function Header() {
   };
 
   return (
-    <header className="h-16 bg-card border-b border-border px-6 flex items-center justify-between flex-shrink-0 relative z-40">
+    <header className="h-16 bg-card border-b border-border px-3 sm:px-6 flex items-center justify-between flex-shrink-0 relative z-40">
       {/* Search Input */}
-      <div className="relative w-80">
+      <div className="relative hidden md:block w-80">
         <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
         <input
           type="text"
@@ -114,8 +76,7 @@ export function Header() {
         />
       </div>
 
-      {/* Header Right Actions */}
-      <div className="flex items-center gap-5">
+      <div className="flex items-center gap-2 sm:gap-5 ml-auto">
         {/* Live Status Indicator */}
         <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-xs text-text-secondary">
           <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />

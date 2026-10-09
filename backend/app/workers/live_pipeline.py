@@ -80,7 +80,13 @@ class LivePipelineWorker:
             },
         )
 
-        # 2. Check and evaluate any open paper positions against current tick
+        # 2. Close any open broker positions that hit their TP/SL, then evaluate paper trades
+        broker_service.check_and_close_open_positions(
+            current_price=current_price,
+            high=quote.ask,
+            low=quote.bid,
+        )
+
         async with self.session_factory() as session:
             await paper_trading_engine.check_and_close_positions(
                 current_price=current_price,

@@ -23,6 +23,8 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 import json
+
+import numpy as np
 import pandas as pd
 
 from ml.artifacts.saver import ModelArtifactSaver
@@ -71,6 +73,79 @@ class InferenceService:
                 continue
         self.current_bundle = None
         print("[InferenceService] WARNING: No model bundle found.")
+
+    def _regime_aware_weights(self, regime: str) -> tuple[float, float, float]:
+        """Dynamically vary ensemble weights by detected market regime to behave more like adaptive AI."""
+        regime_key = (regime or "").upper()
+        if regime_key in {"TRENDING", "TREND"}:
+            return (0.52, 0.30, 0.18)
+        if regime_key in {"RANGING", "RANGE"}:
+            return (0.30, 0.52, 0.18)
+        if regime_key in {"HIGH_VOLATILITY", "VOLATILE", "BREAKOUT"}:
+            return (0.45, 0.25, 0.30)
+        if regime_key in {"ILLIQUID", "LOW_LIQUIDITY"}:
+            return (0.38, 0.42, 0.20)
+        return (0.40, 0.35, 0.25)
+
+    def _compute_ai_drift_score(self, features_df: pd.DataFrame) -> float:
+        """Quantify feature drift to decide whether the AI model is still stable enough for live decisions."""
+        if features_df.empty:
+            return 0.0
+
+        numeric_df = features_df.select_dtypes(include=[np.number]).copy()
+        if numeric_df.empty:
+            return 0.0
+
+        recent_window = numeric_df.tail(min(60, len(numeric_df)))
+        if recent_window.shape[0] < 2:
+            return 0.0
+
+        baseline = recent_window.iloc[:-1].mean(numeric_only=True)
+        current = recent_window.iloc[-1]
+        stds = recent_window.std(ddof=0).replace(0, 1.0)
+
+        z_scores = ((current - baseline) / stds).abs()
+        drift_score = float(z_scores.mean()) / 5.0
+        return min(1.0, max(0.0, drift_score))
+
+    def _is_valid_range_scalp(
+        self,
+        *,
+        regime: str,
+        direction: str | None,
+        confidence: float,
+        price_pos: str,
+        c_close: float,
+        val: float,
+        vah: float,
+        vwap_zscore: float,
+        is_news_clear: bool,
+        spread_pips: float,
+    ) -> bool:
+        """Only allow mean-reversion scalp entries when the market is truly oscillating inside a clean value-area band."""
+        if regime not in {"RANGING", "RANGE"} or direction not in {"LONG", "SHORT"}:
+            return False
+        if confidence < 0.58:
+            return False
+        if not is_news_clear:
+            return False
+        if spread_pips > 0.00030:
+            return False
+        if abs(vwap_zscore) > 0.8:
+            return False
+
+        range_width = abs(vah - val)
+        if range_width <= 0.0004:
+            return False
+
+        inside_value_area = val <= c_close <= vah
+        if not inside_value_area:
+            return False
+
+        if price_pos in {"ABOVE_VAH", "BELOW_VAL"}:
+            return False
+
+        return True
 
     def analyze(
         self,
@@ -130,6 +205,11 @@ class InferenceService:
             add_system_log("FEATURES", "Feature computation produced empty matrix.", "ERROR")
             return self._build_no_trade(candle_ts, "Insufficient historical context for feature engineering.")
 
+        drift_score = self._compute_ai_drift_score(f_matrix)
+        if drift_score > 0.45:
+            add_system_log("AI", f"AI drift score {drift_score:.3f} exceeds safe threshold; live signal generation paused.", "WARNING")
+            return self._build_no_trade(candle_ts, f"AI model drift score is too high ({drift_score:.3f}). Live inference paused.")
+
         latest_features = f_matrix.iloc[[-1]]
         feat_row = latest_features.iloc[0]
 
@@ -142,8 +222,17 @@ class InferenceService:
         # 5. Model Inference & Calibration
         model = self.current_bundle["model"]
         calibrator = self.current_bundle["calibrator"]
+        regime_weights = self._regime_aware_weights(regime)
 
-        raw_probs = model.predict_proba(latest_features.values)
+        original_weights = getattr(model, "weights", None)
+        if original_weights is not None:
+            model.weights = regime_weights
+        try:
+            raw_probs = model.predict_proba(latest_features.values)
+        finally:
+            if original_weights is not None:
+                model.weights = original_weights
+
         cal_probs = calibrator.calibrate(raw_probs)[0]
 
         p_bear, p_neutral, p_bull = float(cal_probs[0]), float(cal_probs[1]), float(cal_probs[2])
@@ -277,7 +366,20 @@ class InferenceService:
             else:
                 strategy_type = "TREND_FOLLOWING"
         elif regime == "RANGING":
-            if direction == "SHORT" and (price_pos == "ABOVE_VAH" or c_close >= vah or vwap_zscore >= 0.8 or above_upper_1):
+            if self._is_valid_range_scalp(
+                regime=regime,
+                direction=direction,
+                confidence=confidence,
+                price_pos=price_pos,
+                c_close=c_close,
+                val=val,
+                vah=vah,
+                vwap_zscore=vwap_zscore,
+                is_news_clear=is_news_clear,
+                spread_pips=spread_pips,
+            ):
+                strategy_type = "RANGE_SCALP"
+            elif direction == "SHORT" and (price_pos == "ABOVE_VAH" or c_close >= vah or vwap_zscore >= 0.8 or above_upper_1):
                 strategy_type = "VP_VALUE_AREA_ROTATION"
             elif direction == "LONG" and (price_pos == "BELOW_VAL" or c_close <= val or vwap_zscore <= -0.8 or below_lower_1):
                 strategy_type = "VP_VALUE_AREA_ROTATION"
@@ -359,6 +461,11 @@ class InferenceService:
                 "reasons": reasons,
                 "patterns": pattern_items,
                 "model_version": self.current_bundle.get("version", "gbpusd-ensemble-v1.0") if self.current_bundle else "gbpusd-ensemble-v1.0",
+                "ai": {
+                    "ready": drift_score <= 0.45,
+                    "drift_score": round(drift_score, 4),
+                    "regime_weights": list(regime_weights),
+                },
                 "volume_profile": {
                     "poc": poc,
                     "vah": vah,
@@ -422,6 +529,21 @@ class InferenceService:
                 sl = round(poc + (sl_m * atr14), 5)
                 tp = round(c_close - (tp_mult * atr14), 5)
             rr = round(tp_mult / sl_m, 2)
+
+        elif strategy_type == "RANGE_SCALP":
+            # Valid range scalp: only in a clean oscillation zone and with strict one-back-and-forth entry controls.
+            sl_m = 0.5
+            if direction == "LONG":
+                entry_low = round(val, 5)
+                entry_high = round(min(vah, c_close + (0.02 * atr14)), 5)
+                sl = round(val - (sl_m * atr14), 5)
+                tp = round(c_close + (0.8 * atr14), 5)
+            else:
+                entry_low = round(max(val, c_close - (0.02 * atr14)), 5)
+                entry_high = round(vah, 5)
+                sl = round(vah + (sl_m * atr14), 5)
+                tp = round(c_close - (0.8 * atr14), 5)
+            rr = round((0.8 * atr14) / max(sl_m * atr14, 1e-5), 2)
 
         elif strategy_type == "MEAN_REVERSION":
             # Mean reversion: tighter SL, TP scales with confidence (market might snap back fast)
@@ -551,6 +673,11 @@ class InferenceService:
             "reasons": active_reasons,
             "patterns": pattern_items,
             "model_version": self.current_bundle.get("version", "gbpusd-ensemble-v1.0") if self.current_bundle else "gbpusd-ensemble-v1.0",
+            "ai": {
+                "ready": drift_score <= 0.45,
+                "drift_score": round(drift_score, 4),
+                "regime_weights": list(regime_weights),
+            },
             "volume_profile": {
                 "poc": poc,
                 "vah": vah,
@@ -605,4 +732,9 @@ class InferenceService:
             ],
             "patterns": [],
             "model_version": version_str,
+            "ai": {
+                "ready": False,
+                "drift_score": 1.0,
+                "regime_weights": [0.40, 0.35, 0.25],
+            },
         }

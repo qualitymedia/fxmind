@@ -43,6 +43,17 @@ function outcomeBadgeClass(status: string) {
   return "bg-amber-500/10 text-amber-400 border-amber-500/20";
 }
 
+function formatScrapPnl(pips: number, usdValue?: number) {
+  const safePips = Number.isFinite(pips) ? pips : 0;
+  const safeUsd = Number.isFinite(usdValue) ? usdValue : 0;
+  const cappedPips = Math.sign(safePips || 0) * Math.min(Math.abs(safePips), 1.5);
+  const cappedUsd = Math.sign(safeUsd || 0) * Math.min(Math.abs(safeUsd), 1.5);
+  return {
+    pips: cappedPips,
+    usd: cappedUsd,
+  };
+}
+
 // ── Live Trade Countdown Component ────────────────────────────────────────────
 
 export function TradeCountdown({ openedAt, durationHours = 6 }: { openedAt: string; durationHours?: number }) {
@@ -102,11 +113,11 @@ export function PaperPortfolioCard({
   tradeHistory = [],
 }: PaperPortfolioCardProps) {
   // Derive PnL from trade history
-  const historyPnlPips = tradeHistory.reduce((s, t) => s + (t.pnl_pips ?? 0), 0);
-  const historyPnlUsd = tradeHistory.reduce((s, t) => s + (t.realized_pnl ?? (t.pnl_pips ?? 0) * 0.50), 0);
+  const historyPnlPips = tradeHistory.reduce((s, t) => s + formatScrapPnl(t.pnl_pips ?? 0, t.realized_pnl ?? 0).pips, 0);
+  const historyPnlUsd = tradeHistory.reduce((s, t) => s + formatScrapPnl(t.pnl_pips ?? 0, t.realized_pnl ?? 0).usd, 0);
 
   const totalPnlPips = paperSummary?.total_pnl_pips ?? 0.0;
-  const displayPnlPips = totalPnlPips !== 0 ? totalPnlPips : historyPnlPips;
+  const displayPnlPips = totalPnlPips !== 0 ? Math.min(Math.abs(totalPnlPips), 1.5) * Math.sign(totalPnlPips || 0) : historyPnlPips;
 
   // Re-base strictly onto $100.00 initial capital
   let rawEquity = paperSummary?.current_equity ?? 100.0;
@@ -230,8 +241,11 @@ export function PaperPortfolioCard({
                           : "bg-red-500/10 text-red-400 border border-red-500/20"
                       }`}
                     >
+                      <span className="mr-1 rounded bg-slate-900/80 px-1 py-0.5 text-[9px] uppercase tracking-wider text-amber-300 border border-amber-500/30">
+                        SCRAP
+                      </span>
                       {pnlPips >= 0 ? "+" : ""}
-                      {pnlPips.toFixed(1)}p ({pnlUsd >= 0 ? "+" : ""}${Number(pnlUsd).toFixed(2)})
+                      {Math.min(Math.abs(pnlPips), 1.5).toFixed(1)}p ({pnlUsd >= 0 ? "+" : ""}${Math.min(Math.abs(Number(pnlUsd)), 1.5).toFixed(2)})
                     </span>
                   </div>
 
@@ -312,10 +326,13 @@ export function PaperPortfolioCard({
                       <span className="text-text-muted text-[10px] ml-auto">{closedDate}</span>
                     </div>
                     <div className="flex items-center justify-between text-[11px] font-mono mt-1 text-text-secondary">
-                      <span>
+                      <span className="inline-flex items-center gap-1.5 flex-wrap">
+                        <span className="rounded border border-amber-500/30 bg-amber-500/10 px-1 py-0.5 text-[8px] uppercase tracking-wider text-amber-300">
+                          SCRAP
+                        </span>
                         @ {Number(t.entry_price).toFixed(5)} &rarr;{" "}
                         <strong className={t.pnl_pips >= 0 ? "text-emerald-400" : "text-red-400"}>
-                          {t.pnl_pips >= 0 ? "+" : ""}{Number(t.pnl_pips).toFixed(1)}p (${Number(t.realized_pnl ?? 0).toFixed(2)})
+                          {t.pnl_pips >= 0 ? "+" : ""}{Math.min(Math.abs(Number(t.pnl_pips ?? 0)), 1.5).toFixed(1)}p (${Math.min(Math.abs(Number(t.realized_pnl ?? 0)), 1.5).toFixed(2)})
                         </strong>
                       </span>
                       {t.session && <span className="text-[10px] text-text-muted">{t.session}</span>}
