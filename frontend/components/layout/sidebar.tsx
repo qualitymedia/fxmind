@@ -6,7 +6,6 @@ import { usePathname, useRouter } from "next/navigation";
 import {
   LayoutDashboard,
   Zap,
-  Calendar,
   BarChart3,
   Settings,
   Bot,
@@ -18,11 +17,12 @@ import {
 import { BrokerModal, AccountInfo } from "@/components/broker/BrokerModal";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BROKER_FEATURES_ENABLED = process.env.NEXT_PUBLIC_BROKER_FEATURES_ENABLED === "true";
 
 const NAV_ITEMS: Array<{ name: string; href: string; icon: LucideIcon; badge?: string }> = [
   { name: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { name: "Signals", href: "/signals", icon: Zap },
-  { name: "Calendar", href: "/calendar", icon: Calendar },
+  { name: "Insights", href: "/calendar", icon: Sparkles },
   { name: "Performance", href: "/performance", icon: BarChart3 },
   { name: "Settings", href: "/settings", icon: Settings },
 ];
@@ -35,6 +35,7 @@ export function Sidebar() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchBrokerStatus = useCallback(async () => {
+    if (!BROKER_FEATURES_ENABLED) return;
     try {
       const res = await fetch(`${API}/api/v1/broker/status`);
       const data = await res.json();
@@ -52,12 +53,14 @@ export function Sidebar() {
   }, []);
 
   useEffect(() => {
+    if (!BROKER_FEATURES_ENABLED) return;
     fetchBrokerStatus();
     const interval = setInterval(fetchBrokerStatus, 10000);
     return () => clearInterval(interval);
   }, [fetchBrokerStatus]);
 
   async function handleToggleAutoTrading() {
+    if (!BROKER_FEATURES_ENABLED) return;
     try {
       const endpoint = autoTrading ? "disable" : "enable";
       const res = await fetch(`${API}/api/v1/broker/auto-trading/${endpoint}`, { method: "POST" });
@@ -71,6 +74,7 @@ export function Sidebar() {
   }
 
   async function handleDisconnect() {
+    if (!BROKER_FEATURES_ENABLED) return;
     try {
       await fetch(`${API}/api/v1/broker/disconnect`, { method: "POST" });
       setAccount(null);
@@ -151,10 +155,10 @@ export function Sidebar() {
                 </div>
                 <div>
                   <span className="text-[11px] font-bold text-text-primary block leading-tight">
-                    Broker Copier
+                    Broker connection
                   </span>
                   <span className="text-[9px] text-text-secondary block">
-                    Cloud Auto-Pilot
+                    Broker linking
                   </span>
                 </div>
               </div>
@@ -171,7 +175,7 @@ export function Sidebar() {
               }}
               className="w-full py-1 px-2 rounded-lg bg-primary/20 hover:bg-primary/30 border border-primary/30 text-primary text-[10px] font-bold flex items-center justify-center gap-1 transition-colors"
             >
-              <Sparkles className="w-2.5 h-2.5" /> Auto-Pilot Gateway &rarr;
+              <Sparkles className="w-2.5 h-2.5" /> Broker access details &rarr;
             </button>
           </div>
 
@@ -180,7 +184,7 @@ export function Sidebar() {
             <div className="w-2 h-2 rounded-full bg-positive animate-pulse flex-shrink-0" />
             <div className="min-w-0">
               <span className="text-[10px] font-semibold text-text-primary block leading-tight truncate">
-                LIVE FEED &bull; VERIFIED
+                FXMIND &bull; M15 MARKET DESK
               </span>
             </div>
           </div>
@@ -212,7 +216,7 @@ export function Sidebar() {
         </div>
       </nav>
 
-      <BrokerModal
+      {BROKER_FEATURES_ENABLED && <BrokerModal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
         account={account}
@@ -220,7 +224,7 @@ export function Sidebar() {
         onRefresh={fetchBrokerStatus}
         onToggleAutoTrading={handleToggleAutoTrading}
         onDisconnect={handleDisconnect}
-      />
+      />}
     </>
   );
 }

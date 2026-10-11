@@ -27,6 +27,10 @@ export interface SignalRow {
   direction: string | null;
   strategy_type?: string | null;
   confidence: number;
+  entry_low?: number | null;
+  entry_high?: number | null;
+  stop_loss?: number | null;
+  take_profit?: number | null;
 }
 
 export interface ModelData {

@@ -89,24 +89,24 @@ export function MainChart({
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: "#0F172A" },
-        textColor: "#94A3B8",
+        background: { type: ColorType.Solid, color: "#FFFFFF" },
+        textColor: "#52616B",
         fontSize: 11,
       },
       grid: {
-        vertLines: { color: "#1E293B" },
-        horzLines: { color: "#1E293B" },
+        vertLines: { color: "#E6EBEF" },
+        horzLines: { color: "#E6EBEF" },
       },
       crosshair: {
-        vertLine: { color: "#475569", style: 2 },
-        horzLine: { color: "#475569", style: 2 },
+        vertLine: { color: "#94A3B8", style: 2 },
+        horzLine: { color: "#94A3B8", style: 2 },
       },
       rightPriceScale: {
-        borderColor: "#1E293B",
+        borderColor: "#D8E0E5",
         autoScale: true,
       },
       timeScale: {
-        borderColor: "#1E293B",
+        borderColor: "#D8E0E5",
         timeVisible: true,
         secondsVisible: false,
       },
@@ -278,7 +278,7 @@ export function MainChart({
               }`}
             >
               <Activity className="w-3.5 h-3.5" />
-              TradingView Live Stream
+              Live chart stream
             </button>
             <button
               onClick={() => setChartMode("ai_overlay")}
@@ -289,33 +289,10 @@ export function MainChart({
               }`}
             >
               <Sparkles className="w-3.5 h-3.5" />
-              AI Setup Lines Overlay
+              AI setup overlay
             </button>
           </div>
 
-          <span className="text-text-muted text-[11px]">
-            {chartMode === "tradingview" ? "FX:GBPUSD Live WebSocket" : `GBP/USD ${timeframe}`}
-          </span>
-        </div>
-
-        <div className="flex items-center gap-2 text-[11px]">
-          {chartMode === "tradingview" ? (
-            <span className="px-2 py-0.5 rounded-full bg-positive/10 border border-positive/20 text-positive font-bold flex items-center gap-1">
-              <span className="w-2 h-2 rounded-full bg-positive animate-pulse" />
-              Real-Time
-            </span>
-          ) : (
-            <>
-              {lastVol != null && (
-                <span className="px-2 py-0.5 rounded bg-background border border-border text-text-secondary font-medium">
-                  Vol {lastVol.toLocaleString()}
-                </span>
-              )}
-              <span className="px-2 py-0.5 rounded bg-positive/10 border border-positive/20 text-positive font-medium">
-                ● Live
-              </span>
-            </>
-          )}
         </div>
       </div>
 
@@ -324,7 +301,7 @@ export function MainChart({
         <TradingViewLiveChart
           symbol="FX:GBPUSD"
           interval={timeframe === "H1" ? "60" : timeframe === "30m" ? "30" : "15"}
-          theme="dark"
+          theme="light"
         />
       ) : (
         <div ref={chartContainerRef} className="w-full relative min-h-[440px]">

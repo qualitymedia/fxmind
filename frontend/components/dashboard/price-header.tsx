@@ -95,30 +95,37 @@ export function PriceHeader({
           </div>
         </div>
 
-        <div className="flex items-center justify-between gap-3 sm:justify-end sm:gap-4">
-          <div className="grid grid-cols-3 gap-2 text-[10px] sm:text-xs min-w-0">
-            <div>
-              <span className="text-text-muted block text-[10px]">Bid</span>
-              <span className="font-semibold text-text-primary">{bid != null ? bid.toFixed(4) : "—"}</span>
+        <div className="flex items-center justify-between gap-2 sm:justify-end sm:gap-4">
+          <div className="min-w-0 flex-1 sm:flex-none">
+            <div className="grid grid-cols-3 gap-1.5 text-[10px] sm:gap-2 sm:text-xs">
+              <div>
+                <span className="text-text-muted block text-[10px]">Bid</span>
+                <span className="font-semibold text-text-primary">{bid != null ? bid.toFixed(4) : "—"}</span>
+              </div>
+              <div>
+                <span className="text-text-muted block text-[10px]">Ask</span>
+                <span className="font-semibold text-text-primary">{ask != null ? ask.toFixed(4) : "—"}</span>
+              </div>
+              <div>
+                <span className="text-text-muted block text-[10px]">Spread</span>
+                <span className="font-semibold text-text-primary">
+                  {spread != null ? `${(spread * 10000).toFixed(1)} pip` : "—"}
+                </span>
+              </div>
             </div>
-            <div>
-              <span className="text-text-muted block text-[10px]">Ask</span>
-              <span className="font-semibold text-text-primary">{ask != null ? ask.toFixed(4) : "—"}</span>
-            </div>
-            <div>
-              <span className="text-text-muted block text-[10px]">Spread</span>
-              <span className="font-semibold text-text-primary">
-                {spread != null ? `${(spread * 10000).toFixed(1)} pip` : "—"}
-              </span>
-            </div>
+            {high24 != null && low24 != null && (
+              <div className="mt-1 text-[9px] text-text-secondary sm:hidden">
+                (24h {low24.toFixed(4)}–{high24.toFixed(4)})
+              </div>
+            )}
           </div>
 
-          <div className="flex items-center gap-2 rounded-lg bg-background p-1 border border-border shrink-0">
+          <div className="flex shrink-0 items-center gap-0.5 rounded-lg border border-border bg-background p-0.5 sm:gap-2 sm:p-1">
             {['M15', '30m', 'H1'].map((tf) => (
               <button
                 key={tf}
                 onClick={() => onTimeframeChange?.(tf)}
-                className={`px-2.5 py-1 text-[10px] font-medium rounded-md transition-colors ${
+                className={`px-2 py-1 text-[9px] font-medium rounded-md transition-colors sm:px-2.5 sm:text-[10px] ${
                   timeframe === tf
                     ? 'bg-primary text-white font-semibold'
                     : 'text-text-secondary hover:text-text-primary'
@@ -145,7 +152,7 @@ export function PriceHeader({
 
       <div className="mt-2 flex items-center justify-between gap-2 flex-wrap">
         {high24 != null && low24 != null && (
-          <div className="text-[10px] text-text-secondary">
+          <div className="hidden text-[10px] text-text-secondary sm:block">
             <span className="text-text-muted">24h</span> {low24.toFixed(4)} – {high24.toFixed(4)}
           </div>
         )}

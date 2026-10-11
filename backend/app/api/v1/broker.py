@@ -7,13 +7,25 @@ and execute live/demo trades directly via REST API.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
 
+from app.core.config import get_settings
 from app.services.broker_service import broker_service
 
-router = APIRouter(prefix="/broker", tags=["broker"])
+
+
+def require_broker_features() -> None:
+    if not get_settings().broker_features_enabled:
+        raise HTTPException(status_code=503, detail="Broker integration is coming soon.")
+
+
+router = APIRouter(
+    prefix="/broker",
+    tags=["broker"],
+    dependencies=[Depends(require_broker_features)],
+)
 
 
 class BrokerConnectRequest(BaseModel):

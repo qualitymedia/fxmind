@@ -16,9 +16,6 @@ import { AIMetricsSidebar } from "@/components/dashboard/ai-metrics-sidebar";
 import { useDashboardData } from "@/lib/useDashboardData";
 import {
   AlertTriangle,
-  RefreshCw,
-  Wifi,
-  WifiOff,
   Moon,
   ArrowRight,
   Zap,
@@ -37,8 +34,6 @@ export default function DashboardPage() {
     tradeHistory,
     loading,
     error,
-    lastRefresh,
-    refetch,
   } = useDashboardData(timeframe);
 
   const signal = analysis?.signal ?? null;
@@ -71,44 +66,6 @@ export default function DashboardPage() {
 
           <div className="flex-1 flex flex-col min-w-0 overflow-x-hidden md:rounded-none">
             <Header />
-
-            {/* Live Data Status Bar */}
-            <div className="px-3 py-1.5 sm:px-5 flex items-center justify-between border-b border-border bg-card text-xs">
-              <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-                {loading ? (
-                  <span className="flex items-center gap-1.5 text-text-muted truncate">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    <span className="hidden sm:inline">Fetching live data…</span>
-                  </span>
-                ) : error ? (
-                  <span className="flex items-center gap-1.5 text-negative font-medium truncate">
-                    <WifiOff className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Backend unreachable</span>
-                  </span>
-                ) : (
-                  <span className="flex items-center gap-1.5 text-positive font-medium truncate">
-                    <Wifi className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Live — polling 15 s</span>
-                  </span>
-                )}
-                {lastRefresh && (
-                  <span className="text-text-muted flex items-center gap-2 min-w-0">
-                    <span className="hidden sm:inline">Updated: {lastRefresh.toLocaleTimeString()}</span>
-                    <button
-                      onClick={() => refetch()}
-                      className="px-2 py-0.5 rounded bg-card-secondary hover:bg-border border border-border text-[10px] font-semibold text-text-primary flex items-center gap-1 transition-colors"
-                      title="Manual Sync"
-                    >
-                      <RefreshCw className={`w-3 h-3 ${loading ? "animate-spin" : ""}`} />
-                      <span className="hidden sm:inline">Sync</span>
-                    </button>
-                  </span>
-                )}
-              </div>
-              <span className="font-mono text-text-secondary text-[10px] sm:text-[11px] hidden sm:inline">
-                Engine: FXMind Alpha v2
-              </span>
-            </div>
 
         {/* Banners */}
         {isWeekendClosed && (

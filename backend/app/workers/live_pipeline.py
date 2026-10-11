@@ -21,6 +21,7 @@ from ml.data.providers.yfinance_provider import YFinanceLiveProvider
 from ml.data.providers.base import Candle
 from ml.data.storage import ParquetStorage
 from ml.inference.service import InferenceService
+from app.core.config import get_settings
 from app.websocket.manager import ws_manager
 from app.db.database import get_session_factory
 from app.services.signal_service import save_signal_to_db
@@ -81,11 +82,12 @@ class LivePipelineWorker:
         )
 
         # 2. Close any open broker positions that hit their TP/SL, then evaluate paper trades
-        broker_service.check_and_close_open_positions(
-            current_price=current_price,
-            high=quote.ask,
-            low=quote.bid,
-        )
+        if get_settings().broker_features_enabled:
+            broker_service.check_and_close_open_positions(
+                current_price=current_price,
+                high=quote.ask,
+                low=quote.bid,
+            )
 
         async with self.session_factory() as session:
             await paper_trading_engine.check_and_close_positions(
@@ -149,15 +151,16 @@ class LivePipelineWorker:
             paper_trading_engine.open_trade(analysis_result, db_signal_id=db_signal_id)
 
             # --- AI Auto-Execution on real broker (if connected + auto-trading ON) ---
-            auto_result = broker_service.auto_execute_signal(analysis_result)
-            if auto_result.get("success"):
-                print(
-                    f"[LIVE WORKER] AI auto-trade executed: "
-                    f"{auto_result.get('direction')} {auto_result.get('symbol')} "
-                    f"@ {auto_result.get('price'):.5f} Ticket #{auto_result.get('order_ticket')}"
-                )
-            elif not auto_result.get("skipped"):
-                print(f"[LIVE WORKER] AI auto-trade failed: {auto_result.get('error')}")
+            if get_settings().broker_features_enabled:
+                auto_result = broker_service.auto_execute_signal(analysis_result)
+                if auto_result.get("success"):
+                    print(
+                        f"[LIVE WORKER] AI auto-trade executed: "
+                        f"{auto_result.get('direction')} {auto_result.get('symbol')} "
+                        f"@ {auto_result.get('price'):.5f} Ticket #{auto_result.get('order_ticket')}"
+                    )
+                elif not auto_result.get("skipped"):
+                    print(f"[LIVE WORKER] AI auto-trade failed: {auto_result.get('error')}")
 
             try:
                 await telegram_service.send_signal_alert(analysis_result)

@@ -4,20 +4,20 @@
 
 @layer base {
   html {
-    font-size: 83.5%;
+    font-size: 100%;
     -webkit-tap-highlight-color: transparent;
   }
 
   body {
     @apply bg-background text-text-primary font-sans antialiased selection:bg-primary/20 selection:text-primary;
     min-height: 100vh;
+    background-image:
+      linear-gradient(to right, rgb(15 23 42 / 0.018) 1px, transparent 1px),
+      linear-gradient(to bottom, rgb(15 23 42 / 0.018) 1px, transparent 1px);
+    background-size: 32px 32px;
   }
 
   @media (max-width: 767px) {
-    html {
-      font-size: 80%;
-    }
-
     body {
       padding-bottom: 5rem;
     }

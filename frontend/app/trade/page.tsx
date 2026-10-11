@@ -26,9 +26,11 @@ import {
   Sliders,
 } from "lucide-react";
 import { Sidebar } from "@/components/layout/sidebar";
+import { Header } from "@/components/layout/header";
 import { BrokerModal, AccountInfo } from "@/components/broker/BrokerModal";
 
 const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const BROKER_FEATURES_ENABLED = process.env.NEXT_PUBLIC_BROKER_FEATURES_ENABLED === "true";
 
 interface Position {
   ticket: number;
@@ -107,6 +109,10 @@ export default function TradePage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   const fetchStatus = useCallback(async () => {
+    if (!BROKER_FEATURES_ENABLED) {
+      setLoading(false);
+      return;
+    }
     try {
       const res = await fetch(`${API}/api/v1/broker/status`);
       const data = await res.json();
@@ -126,12 +132,14 @@ export default function TradePage() {
   }, []);
 
   useEffect(() => {
+    if (!BROKER_FEATURES_ENABLED) return;
     fetchStatus();
     const interval = setInterval(fetchStatus, 8000);
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
   useEffect(() => {
+    if (!BROKER_FEATURES_ENABLED) return;
     function handleOpenModal() {
       setIsModalOpen(true);
     }
@@ -159,6 +167,36 @@ export default function TradePage() {
       await fetch(`${API}/api/v1/broker/disconnect`, { method: "POST" });
       setAccount(null);
     } catch (_) {}
+  }
+
+  if (!BROKER_FEATURES_ENABLED) {
+    return (
+      <div className="flex min-h-screen bg-background text-text-primary">
+        <Sidebar />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <Header />
+          <main className="mx-auto flex w-full max-w-5xl flex-1 items-start px-4 py-8 sm:px-6">
+            <section className="w-full border border-border bg-card shadow-card">
+              <div className="flex flex-wrap items-center gap-3 border-b border-border px-5 py-5 sm:px-7">
+                <div className="flex h-10 w-10 items-center justify-center rounded-md border border-warning/20 bg-warning/5 text-warning">
+                  <Bot className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-[11px] font-bold uppercase text-warning">In development</p>
+                  <h2 className="mt-0.5 font-display text-xl font-bold">Broker access is coming soon</h2>
+                </div>
+                <span className="ml-auto border border-border px-2.5 py-1 font-mono text-[10px] font-semibold uppercase text-text-secondary">Disabled</span>
+              </div>
+              <div className="px-5 py-6 sm:px-7">
+                <p className="max-w-2xl text-sm leading-6 text-text-secondary">
+                  Broker connections and trade execution are disabled while this integration is being completed and tested. Market analysis and signal history remain available.
+                </p>
+              </div>
+            </section>
+          </main>
+        </div>
+      </div>
+    );
   }
 
   return (

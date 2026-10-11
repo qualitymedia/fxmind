@@ -34,6 +34,7 @@ class Settings(BaseSettings):
     app_env: AppEnv = AppEnv.DEVELOPMENT
     debug: bool = True
     demo_mode: bool = True
+    broker_features_enabled: bool = False
     log_level: str = "INFO"
     secret_key: str = "change-me-to-a-random-string-in-production"
 
