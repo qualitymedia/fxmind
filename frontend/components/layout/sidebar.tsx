@@ -98,7 +98,7 @@ export function Sidebar() {
                 FXMind
               </span>
               <span className="text-[11px] text-text-secondary font-medium block truncate">
-                GBP/USD AI Assistant
+                GBP/USD Market Analysis
               </span>
             </div>
           </div>

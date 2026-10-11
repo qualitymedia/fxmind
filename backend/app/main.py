@@ -15,7 +15,7 @@ from app.api.v1.router import api_v1_router
 from app.core.config import get_settings
 from app.core.exceptions import register_exception_handlers
 from app.core.logging import get_logger, setup_logging
-from app.db.database import dispose_engine, get_session_factory, init_db
+from app.db.database import close_mongo_connection, connect_to_mongo
 from app.services.data_bootstrap import seed_runtime_data
 from app.workers.live_pipeline import live_worker
 
@@ -31,20 +31,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         f"app_startup app_name={settings.app_name} env={settings.app_env.value} demo_mode={settings.demo_mode}"
     )
 
-    # Initialize DB tables
     try:
-        await init_db()
-    except Exception as e:
-        logger.warning(f"init_db warning: {e}")
-
-    # Backfill the runtime database from the persisted parquet/model artifacts if it was
-    # created empty during the backend/frontend reorg.
-    try:
-        factory = get_session_factory()
-        async with factory() as session:
-            await seed_runtime_data(session)
-    except Exception as e:
-        logger.warning(f"runtime bootstrap warning: {e}")
+        database = await connect_to_mongo()
+        await seed_runtime_data(database)
+    except Exception:
+        await close_mongo_connection()
+        raise
 
     # Start live continuous inference worker task
     worker_task = asyncio.create_task(live_worker.start())
@@ -54,7 +46,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("app_shutdown")
     live_worker.stop()
     worker_task.cancel()
-    await dispose_engine()
+    await close_mongo_connection()
 
 
 def create_app() -> FastAPI:
@@ -63,7 +55,7 @@ def create_app() -> FastAPI:
 
     app = FastAPI(
         title=settings.app_name,
-        description="GBP/USD AI Market Analysis Assistant API",
+        description="GBP/USD market analysis API",
         version="1.0.0",
         docs_url="/docs" if settings.debug else None,
         redoc_url="/redoc" if settings.debug else None,

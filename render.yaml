@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: fxmind-api
+    runtime: python
+    buildCommand: pip install -r backend/requirements.txt
+    startCommand: PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /api/v1/health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.11
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: BROKER_FEATURES_ENABLED
+        value: "false"
+      - key: MONGODB_DATABASE
+        value: fxmind
+      - key: MONGODB_URI
+        sync: false
+      - key: JWT_SECRET_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false

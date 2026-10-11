@@ -6,9 +6,8 @@ GET /api/v1/signals/{id} — signal detail by ID from database
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from pymongo.asynchronous.database import AsyncDatabase
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
 from app.models.signal import Signal
@@ -98,10 +97,10 @@ def _model_to_response(s: Signal) -> SignalResponse:
 async def get_signals_list(
     limit: int = Query(20, ge=1, le=100),
     status: str | None = None,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncDatabase = Depends(get_db),
 ) -> list[SignalListItem]:
     """
-    Get recent signal history from the SQLite database.
+    Get recent signal history from MongoDB.
     If database has no signals yet, runs an inference pass and persists it.
     """
     db_signals = await get_signals_from_db(db, limit=limit, status=status)
@@ -124,9 +123,9 @@ async def get_signals_list(
 @router.get("/{signal_id}", response_model=SignalResponse)
 async def get_signal_detail(
     signal_id: int,
-    db: AsyncSession = Depends(get_db),
+    db: AsyncDatabase = Depends(get_db),
 ) -> SignalResponse:
-    """Get signal detail by ID directly from the database."""
+    """Get signal detail by ID directly from MongoDB."""
     signal = await get_signal_by_id(db, signal_id)
     if not signal:
         raise HTTPException(status_code=404, detail=f"Signal ID '{signal_id}' not found in database.")

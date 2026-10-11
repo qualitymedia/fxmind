@@ -1,5 +1,5 @@
 mods = [
-    'aiosqlite', 'fastapi', 'uvicorn', 'sqlalchemy', 'yfinance',
+    'pymongo', 'fastapi', 'uvicorn', 'yfinance',
     'pandas', 'catboost', 'sklearn', 'pydantic', 'pydantic_settings',
     'pyarrow', 'websockets', 'structlog', 'watchfiles', 'httpx',
     'jose', 'passlib', 'yaml', 'numpy', 'scipy', 'joblib',

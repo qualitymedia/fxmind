@@ -1,30 +1,37 @@
-"""
-Base model mixin with common fields.
-
-All timestamps are stored in UTC.
-"""
+"""Pydantic document models and MongoDB document conversion helpers."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from typing import Any, ClassVar, TypeVar
 
-from sqlalchemy import DateTime, func
-from sqlalchemy.orm import Mapped, mapped_column
+from pydantic import BaseModel, ConfigDict, Field
+
+DocumentType = TypeVar("DocumentType", bound="MongoDocument")
 
 
-class TimestampMixin:
-    """Adds created_at and updated_at columns."""
+class MongoDocument(BaseModel):
+    """Base document with API-compatible IDs and UTC audit timestamps."""
 
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        server_default=func.now(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        server_default=func.now(),
-        onupdate=lambda: datetime.now(timezone.utc),
-        nullable=False,
-    )
+    model_config = ConfigDict(populate_by_name=True)
+
+    collection: ClassVar[str]
+    id: int | str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+def from_mongo(model: type[DocumentType], document: dict[str, Any] | None) -> DocumentType | None:
+    """Validate a MongoDB document as its API-facing Pydantic model."""
+    if document is None:
+        return None
+    data = dict(document)
+    data["id"] = data.pop("_id")
+    return model.model_validate(data)
+
+
+def to_mongo(document: MongoDocument) -> dict[str, Any]:
+    """Serialize a document while mapping its public id to MongoDB's _id."""
+    data = document.model_dump()
+    data["_id"] = data.pop("id")
+    return data

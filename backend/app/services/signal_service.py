@@ -1,23 +1,20 @@
-"""
-Signal Persistence Service.
-
-Handles database transactions for saving ML inference signals and
-updating trade outcomes (TARGET_HIT, STOP_HIT, EXPIRED).
-"""
+"""MongoDB persistence for generated signals and trade outcomes."""
 
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import json
 from typing import Optional
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
 
+from pymongo import ReturnDocument
+from pymongo.asynchronous.database import AsyncDatabase
+
+from app.db.database import next_document_id
+from app.models.base import from_mongo, to_mongo
 from app.models.signal import Signal, SignalReason
 
 
-async def save_signal_to_db(signal_dict: dict, db: AsyncSession) -> Signal:
-    """Save an AI analysis signal and its reasons to the database."""
+async def save_signal_to_db(signal_dict: dict, db: AsyncDatabase) -> Signal:
+    """Save a signal and its bounded evidence reasons in a single document."""
     trade = signal_dict.get("trade", {})
     model_probs = signal_dict.get("model", {})
     market = signal_dict.get("market", {})
@@ -27,21 +24,27 @@ async def save_signal_to_db(signal_dict: dict, db: AsyncSession) -> Signal:
     if isinstance(ts_raw, str):
         try:
             timestamp = datetime.fromisoformat(ts_raw)
-        except Exception:
+        except ValueError:
             timestamp = datetime.now(timezone.utc)
     elif isinstance(ts_raw, datetime):
         timestamp = ts_raw
     else:
         timestamp = datetime.now(timezone.utc)
 
-    # Ensure timezone awareness
     if timestamp.tzinfo is None:
         timestamp = timestamp.replace(tzinfo=timezone.utc)
 
-    # Status handling
-    trade_status = trade.get("status", "NO_TRADE")
-
+    reasons = [
+        SignalReason(
+            category=reason.get("category", "Analysis"),
+            reason=reason.get("reason", ""),
+            value=reason.get("value"),
+            sentiment=reason.get("sentiment", "NEUTRAL"),
+        )
+        for reason in signal_dict.get("reasons", [])
+    ]
     signal = Signal(
+        id=await next_document_id(db, "signals"),
         symbol=signal_dict.get("symbol", "GBPUSD"),
         timeframe=signal_dict.get("timeframe", "M15"),
         timestamp=timestamp,
@@ -51,7 +54,7 @@ async def save_signal_to_db(signal_dict: dict, db: AsyncSession) -> Signal:
         bull_probability=float(model_probs.get("bull_probability", 0.3333)),
         bear_probability=float(model_probs.get("bear_probability", 0.3333)),
         neutral_probability=float(model_probs.get("neutral_probability", 0.3334)),
-        status=trade_status,
+        status=trade.get("status", "NO_TRADE"),
         direction=trade.get("direction"),
         entry_low=trade.get("entry_low"),
         entry_high=trade.get("entry_high"),
@@ -67,25 +70,9 @@ async def save_signal_to_db(signal_dict: dict, db: AsyncSession) -> Signal:
         model_version=signal_dict.get("model_version", "gbpusd-ensemble-v1.0"),
         outcome=signal_dict.get("outcome"),
         outcome_pnl=signal_dict.get("outcome_pnl"),
+        reasons=reasons,
     )
-
-    db.add(signal)
-    await db.flush()  # Populates signal.id
-
-    # Add reasons
-    reasons_data = signal_dict.get("reasons", [])
-    for r in reasons_data:
-        reason_obj = SignalReason(
-            signal_id=signal.id,
-            category=r.get("category", "Analysis"),
-            reason=r.get("reason", ""),
-            value=r.get("value"),
-            sentiment=r.get("sentiment", "NEUTRAL"),
-        )
-        db.add(reason_obj)
-
-    await db.commit()
-    await db.refresh(signal)
+    await db[Signal.collection].insert_one(to_mongo(signal))
     return signal
 
 
@@ -93,48 +80,42 @@ async def update_signal_outcome(
     signal_id: int,
     outcome: str,
     pnl: float,
-    db: AsyncSession,
+    db: AsyncDatabase,
 ) -> Optional[Signal]:
     """Update outcome and P&L for a resolved signal."""
-    result = await db.execute(select(Signal).where(Signal.id == signal_id))
-    signal = result.scalar_one_or_none()
-    if not signal:
-        return None
-
-    signal.outcome = outcome
-    signal.outcome_pnl = round(pnl, 2)
-    signal.outcome_timestamp = datetime.now(timezone.utc)
+    updates = {
+        "outcome": outcome,
+        "outcome_pnl": round(pnl, 2),
+        "outcome_timestamp": datetime.now(timezone.utc),
+        "updated_at": datetime.now(timezone.utc),
+    }
     if outcome in ("TARGET_HIT", "STOP_HIT", "EXPIRED", "INVALIDATED"):
-        signal.status = outcome
+        updates["status"] = outcome
 
-    await db.commit()
-    await db.refresh(signal)
-    return signal
+    result = await db[Signal.collection].find_one_and_update(
+        {"_id": signal_id},
+        {"$set": updates},
+        return_document=ReturnDocument.AFTER,
+    )
+    return from_mongo(Signal, result)
 
 
 async def get_signals_from_db(
-    db: AsyncSession,
+    db: AsyncDatabase,
     limit: int = 50,
     status: Optional[str] = None,
 ) -> list[Signal]:
-    """Query recent signals with reasons preloaded."""
-    from sqlalchemy.orm import selectinload
-    stmt = (
-        select(Signal)
-        .options(selectinload(Signal.reasons))
-        .order_by(Signal.timestamp.desc())
-        .limit(limit)
-    )
-    if status:
-        stmt = stmt.where(Signal.status == status.upper())
-
-    result = await db.execute(stmt)
-    return list(result.scalars().all())
+    """Query recent signals and their embedded reasons."""
+    query = {"status": status.upper()} if status else {}
+    cursor = db[Signal.collection].find(query).sort("timestamp", -1).limit(limit)
+    return [
+        signal
+        for document in await cursor.to_list(length=limit)
+        if (signal := from_mongo(Signal, document)) is not None
+    ]
 
 
-async def get_signal_by_id(db: AsyncSession, signal_id: int) -> Optional[Signal]:
-    """Query a single signal by ID."""
-    from sqlalchemy.orm import selectinload
-    stmt = select(Signal).options(selectinload(Signal.reasons)).where(Signal.id == signal_id)
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
+async def get_signal_by_id(db: AsyncDatabase, signal_id: int) -> Optional[Signal]:
+    """Query a single signal by its public numeric ID."""
+    document = await db[Signal.collection].find_one({"_id": signal_id})
+    return from_mongo(Signal, document)

@@ -18,12 +18,11 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from ml.data.providers.yfinance_provider import YFinanceLiveProvider
-from ml.data.providers.base import Candle
 from ml.data.storage import ParquetStorage
 from ml.inference.service import InferenceService
 from app.core.config import get_settings
 from app.websocket.manager import ws_manager
-from app.db.database import get_session_factory
+from app.db.database import get_database
 from app.services.signal_service import save_signal_to_db
 from app.services.paper_trading import paper_trading_engine
 from app.services.telegram_service import telegram_service
@@ -40,7 +39,6 @@ class LivePipelineWorker:
         self.inference_service = InferenceService()
         self.is_running = False
         self.last_processed_timestamp: Optional[datetime] = None
-        self.session_factory = get_session_factory()
 
     async def start(self) -> None:
         """Start the background live analysis loop."""
@@ -89,13 +87,13 @@ class LivePipelineWorker:
                 low=quote.bid,
             )
 
-        async with self.session_factory() as session:
-            await paper_trading_engine.check_and_close_positions(
-                current_price=current_price,
-                high=quote.ask,
-                low=quote.bid,
-                db=session,
-            )
+        database = get_database()
+        await paper_trading_engine.check_and_close_positions(
+            current_price=current_price,
+            high=quote.ask,
+            low=quote.bid,
+            db=database,
+        )
 
         # Periodically refresh M15 candles if needed
         m15_df = self.storage.load_candles_df("GBPUSD", "M15")
@@ -135,16 +133,15 @@ class LivePipelineWorker:
 
         analysis_result = await loop.run_in_executor(None, _load_and_analyze)
 
-        # 4. Save Signal to SQLite DB & Open Paper Trade if ACTIVE
+        # 4. Save Signal to MongoDB & Open Paper Trade if ACTIVE
         db_signal_id = None
-        async with self.session_factory() as session:
-            try:
-                saved_signal = await save_signal_to_db(analysis_result, session)
-                db_signal_id = saved_signal.id
-                analysis_result["id"] = db_signal_id
-                print(f"[LIVE WORKER] Signal saved to DB with ID={db_signal_id}")
-            except Exception as e:
-                print(f"[LIVE WORKER] Signal DB persistence error: {e}")
+        try:
+            saved_signal = await save_signal_to_db(analysis_result, database)
+            db_signal_id = saved_signal.id
+            analysis_result["id"] = db_signal_id
+            print(f"[LIVE WORKER] Signal saved to MongoDB with ID={db_signal_id}")
+        except Exception as e:
+            print(f"[LIVE WORKER] Signal DB persistence error: {e}")
 
         # Open simulated paper trade if signal is ACTIVE
         if analysis_result.get("trade", {}).get("status") == "ACTIVE":

@@ -5,7 +5,21 @@ const getWebSocketBase = () => {
     return process.env.NEXT_PUBLIC_WS_URL.replace(/\/$/, "");
   }
 
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/^http/, "ws").replace(/\/$/, "");
+  }
+
   if (typeof window !== "undefined") {
+    const host = window.location.hostname;
+    const isLocalHost =
+      host === "localhost" ||
+      host === "127.0.0.1" ||
+      host === "0.0.0.0" ||
+      /^(172\.|10\.|192\.168\.)/.test(host);
+    if (!isLocalHost) {
+      return "";
+    }
+
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     return `${protocol}://${window.location.hostname}:8000`;
   }

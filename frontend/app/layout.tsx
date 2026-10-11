@@ -19,9 +19,9 @@ const ibmPlexMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "FXMind — GBP/USD AI Market Analysis Assistant",
+  title: "FXMind — GBP/USD Market Analysis",
   description:
-    "Production-oriented probabilistic AI market analysis for GBP/USD. Multiclass XGBoost classification with calibrated probabilities, regime detection, and transparent reasoning.",
+    "GBP/USD market analysis with calibrated probability forecasts, market-regime detection, and transparent signal explanations.",
 };
 
 export default function RootLayout({

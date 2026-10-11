@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import math
 from fastapi import APIRouter, Depends
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from pymongo.asynchronous.database import AsyncDatabase
 
 from app.db.database import get_db
 from app.models.signal import Signal
+from app.models.base import from_mongo
 from ml.artifacts.saver import ModelArtifactSaver
 
 router = APIRouter(prefix="/performance", tags=["performance"])
@@ -16,22 +16,22 @@ INITIAL_CAPITAL = 100.0  # Paper trading account size in USD
 
 
 @router.get("")
-async def get_performance_summary(db: AsyncSession = Depends(get_db)):
+async def get_performance_summary(db: AsyncDatabase = Depends(get_db)):
     """
     Get performance metrics.
     Priority:
     1. Real DB-recorded trade outcomes (from paper trading / live signals).
     2. Walk-forward out-of-sample evaluation metrics from the trained model bundle.
     """
-    # 1. Check for real closed trades in SQLite DB
-    stmt = (
-        select(Signal)
-        .where(Signal.outcome.isnot(None))
-        .where(Signal.outcome_pnl.isnot(None))
-        .order_by(Signal.timestamp.asc())
-    )
-    result = await db.execute(stmt)
-    closed_signals = list(result.scalars().all())
+    # 1. Check for real closed trades in MongoDB.
+    cursor = db[Signal.collection].find(
+        {"outcome": {"$ne": None}, "outcome_pnl": {"$ne": None}}
+    ).sort("timestamp", 1)
+    closed_signals = [
+        signal
+        for document in await cursor.to_list(length=None)
+        if (signal := from_mongo(Signal, document)) is not None
+    ]
 
     if len(closed_signals) >= 3:
         pnls = [s.outcome_pnl for s in closed_signals]
@@ -162,16 +162,18 @@ def _build_equity_curve_from_metrics(
 
 
 @router.get("/by-regime")
-async def get_performance_by_regime(db: AsyncSession = Depends(get_db)):
+async def get_performance_by_regime(db: AsyncDatabase = Depends(get_db)):
     """Get real performance breakdown by market regime from DB outcomes."""
-    stmt = (
-        select(Signal)
-        .where(Signal.outcome.isnot(None))
-        .where(Signal.outcome_pnl.isnot(None))
-        .where(Signal.regime.isnot(None))
-    )
-    result = await db.execute(stmt)
-    closed_signals = list(result.scalars().all())
+    cursor = db[Signal.collection].find({
+        "outcome": {"$ne": None},
+        "outcome_pnl": {"$ne": None},
+        "regime": {"$ne": None},
+    })
+    closed_signals = [
+        signal
+        for document in await cursor.to_list(length=None)
+        if (signal := from_mongo(Signal, document)) is not None
+    ]
 
     # Group by regime
     regime_groups: dict[str, list[float]] = {}

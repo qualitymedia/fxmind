@@ -3,19 +3,39 @@ Pytest configuration and fixtures.
 """
 
 import asyncio
+from datetime import datetime, timezone
 from typing import AsyncGenerator
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from app.core.config import get_settings
-from app.db.database import Base, get_db
+from app.db.database import get_db
 from app.main import app
 
-# SQLite memory database for testing
-TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+class _FakeCollection:
+    def __init__(self, document: dict | None = None):
+        self.document = document
+
+    async def find_one(self, *_args, **_kwargs):
+        return self.document
+
+
+class _FakeMongoDatabase:
+    def __init__(self):
+        now = datetime.now(timezone.utc)
+        self.collections = {
+            "market_candles": _FakeCollection({"timestamp": now}),
+            "model_versions": _FakeCollection({"version": "test-model"}),
+            "signals": _FakeCollection({"timestamp": now}),
+        }
+
+    def __getitem__(self, name: str) -> _FakeCollection:
+        return self.collections[name]
+
+    async def command(self, _command: str):
+        return {"ok": 1}
 
 
 @pytest.fixture(scope="session")
@@ -29,8 +49,15 @@ def event_loop():
 @pytest_asyncio.fixture(scope="function")
 async def async_client() -> AsyncGenerator[AsyncClient, None]:
     """Provide an async test client."""
+    async def override_get_db():
+        yield _FakeMongoDatabase()
+
+    app.dependency_overrides[get_db] = override_get_db
     async with AsyncClient(
         transport=ASGITransport(app=app),
         base_url="http://test",
     ) as client:
-        yield client
+        try:
+            yield client
+        finally:
+            app.dependency_overrides.pop(get_db, None)

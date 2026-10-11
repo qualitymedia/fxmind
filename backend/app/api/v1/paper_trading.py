@@ -8,7 +8,7 @@ GET /api/v1/paper-trading/summary   — live equity, win rate, total PnL
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.ext.asyncio import AsyncSession
+from pymongo.asynchronous.database import AsyncDatabase
 
 from app.db.database import get_db
 from app.services.paper_trading import paper_trading_engine
@@ -25,10 +25,10 @@ async def get_open_positions():
 @router.get("/history")
 async def get_trade_history(
     limit: int = Query(50, ge=1, le=200),
-    db: AsyncSession = Depends(get_db),
+    db: AsyncDatabase = Depends(get_db),
 ):
     """
-    Get history of completed paper trades from the database.
+    Get history of completed paper trades from MongoDB.
     DB-backed — survives server restarts.
     Only returns signals that had an actual active trade (with entry prices).
     """

@@ -1,20 +1,18 @@
-"""
-Health endpoint for FXMind.
-
-Returns comprehensive system status including database,
-market data, and model availability.
-"""
+"""Health endpoint for FXMind."""
 
 from __future__ import annotations
 
-import asyncio
-import sqlite3
 from datetime import datetime, timezone
 
 import pandas as pd
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+from pymongo.errors import PyMongoError
+from pymongo.asynchronous.database import AsyncDatabase
 
 from app.core.config import get_settings
+from app.db.database import get_db
+from app.models.signal import Signal
+from app.models.model_version import ModelVersion
 from app.schemas.common import HealthResponse
 from ml.artifacts.saver import ModelArtifactSaver
 
@@ -22,99 +20,61 @@ router = APIRouter(tags=["health"])
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check() -> HealthResponse:
-    """
-    Lightweight system health check — does NOT use the async session pool
-    so it always responds even when the live worker holds the write lock.
-    """
+async def health_check(database: AsyncDatabase = Depends(get_db)) -> HealthResponse:
+    """Report database connectivity, available market data, and model status."""
     settings = get_settings()
+    db_status = "healthy"
+    market_status = "healthy"
+    model_status = "healthy"
+    model_version = None
+    last_market_update = None
+    last_prediction = None
 
-    def _check_db():
-        """Run direct sqlite3 checks in a thread (bypasses async pool contention)."""
-        db_status = "healthy"
-        market_status = "healthy"
-        model_status = "healthy"
-        model_version = None
-        last_market_update = None
-        last_prediction = None
-
-        try:
-            db_path = (settings.project_root / "data" / "fxmind.db").resolve()
-            if not db_path.exists():
-                return "no_db", "no_data", "no_model", None, None, None
-
-            conn = sqlite3.connect(str(db_path), timeout=5)
-            conn.row_factory = sqlite3.Row
-            try:
-                # Test DB connectivity
-                conn.execute("SELECT 1").fetchone()
-
-                # Check market data
-                row = conn.execute(
-                    "SELECT MAX(timestamp) FROM market_candles WHERE symbol = 'GBPUSD'"
-                ).fetchone()
-                last_market_update = row[0] if row else None
-                if last_market_update is None:
-                    market_file = settings.project_root / "data" / "parquet" / "GBPUSD_M15.parquet"
-                    if market_file.exists():
-                        try:
-                            df = pd.read_parquet(market_file)
-                            if not df.empty:
-                                last_market_update = pd.to_datetime(df["timestamp"]).max().to_pydatetime()
-                                market_status = "healthy"
-                            else:
-                                market_status = "no_data"
-                        except Exception:
-                            market_status = "no_data"
-                    else:
-                        market_status = "no_data"
+    try:
+        await database.command("ping")
+        candle = await database["market_candles"].find_one(
+            {"symbol": "GBPUSD"},
+            projection={"timestamp": 1},
+            sort=[("timestamp", -1)],
+        )
+        if candle:
+            last_market_update = candle.get("timestamp")
+        else:
+            market_file = settings.project_root / "data" / "parquet" / "GBPUSD_M15.parquet"
+            if market_file.exists():
+                df = pd.read_parquet(market_file)
+                if not df.empty:
+                    last_market_update = pd.to_datetime(df["timestamp"]).max().to_pydatetime()
                 else:
-                    market_status = "healthy"
+                    market_status = "no_data"
+            else:
+                market_status = "no_data"
 
-                # Check model
-                row = conn.execute(
-                    "SELECT version FROM model_versions WHERE state = 'PRODUCTION' ORDER BY created_at DESC LIMIT 1"
-                ).fetchone()
-                model_version = row[0] if row else None
-                if model_version is None:
-                    try:
-                        bundle = ModelArtifactSaver().load_bundle()
-                        candidate = bundle.get("version") if isinstance(bundle, dict) else None
-                    except Exception:
-                        candidate = None
-                    if candidate:
-                        model_version = candidate
-                        model_status = "healthy"
-                    else:
-                        model_status = "no_model"
-                else:
-                    model_status = "healthy"
+        model = await database[ModelVersion.collection].find_one(
+            {"state": "PRODUCTION"},
+            projection={"version": 1},
+            sort=[("created_at", -1)],
+        )
+        model_version = model.get("version") if model else None
+        if model_version is None:
+            bundle = ModelArtifactSaver().load_bundle()
+            model_version = bundle.get("version") if isinstance(bundle, dict) else None
+            if model_version is None:
+                model_status = "no_model"
 
-                # Last prediction
-                row = conn.execute(
-                    "SELECT MAX(timestamp) FROM signals WHERE symbol = 'GBPUSD'"
-                ).fetchone()
-                last_prediction = row[0] if row else None
+        signal = await database[Signal.collection].find_one(
+            {"symbol": "GBPUSD"},
+            projection={"timestamp": 1},
+            sort=[("timestamp", -1)],
+        )
+        last_prediction = signal.get("timestamp") if signal else None
+    except PyMongoError:
+        db_status = "unhealthy"
+        market_status = "unknown"
+        model_status = "unknown"
 
-            finally:
-                conn.close()
-
-        except Exception as e:
-            db_status = "unhealthy"
-
-        return db_status, market_status, model_status, model_version, last_market_update, last_prediction
-
-    loop = asyncio.get_running_loop()
-    db_status, market_status, model_status, model_version, last_market_update, last_prediction = \
-        await loop.run_in_executor(None, _check_db)
-
-    # Overall status
     overall = "healthy"
-    if db_status != "healthy":
-        overall = "degraded"
-    elif market_status not in ("healthy",):
-        overall = "degraded"
-    elif model_status not in ("healthy", "no_model"):
+    if db_status != "healthy" or market_status != "healthy":
         overall = "degraded"
 
     return HealthResponse(

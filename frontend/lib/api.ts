@@ -1,4 +1,8 @@
 const getApiBase = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) {
+    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
+  }
+
   if (typeof window !== "undefined") {
     const host = window.location.hostname;
     const localNetworkHosts = ["localhost", "127.0.0.1", "0.0.0.0"];
@@ -9,11 +13,7 @@ const getApiBase = () => {
     }
   }
 
-  if (process.env.NEXT_PUBLIC_API_URL) {
-    return process.env.NEXT_PUBLIC_API_URL.replace(/\/$/, "");
-  }
-
-  return "http://127.0.0.1:8000";
+  return "";
 };
 
 const API_BASE = getApiBase();

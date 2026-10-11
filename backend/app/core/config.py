@@ -4,12 +4,11 @@ FXMind Core Configuration.
 
 from __future__ import annotations
 
-import os
 from enum import Enum
 from pathlib import Path
 from typing import Optional
 
-from pydantic import Field, field_validator
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -23,7 +22,10 @@ class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=(
+            Path(__file__).resolve().parents[3] / ".env",
+            Path(__file__).resolve().parents[2] / ".env",
+        ),
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
@@ -32,50 +34,51 @@ class Settings(BaseSettings):
     # ── Application ──────────────────────────────
     app_name: str = "FXMind"
     app_env: AppEnv = AppEnv.DEVELOPMENT
-    debug: bool = True
+    debug: bool = False
     demo_mode: bool = True
     broker_features_enabled: bool = False
     log_level: str = "INFO"
-    secret_key: str = "change-me-to-a-random-string-in-production"
 
     # ── Database ─────────────────────────────────
-    postgres_host: str = "localhost"
-    postgres_port: int = 5432
-    postgres_db: str = "fxmind"
-    postgres_user: str = "fxmind"
-    postgres_password: str = "fxmind_dev_password"
-    database_url: Optional[str] = None
-
-    @property
-    def db_url(self) -> str:
-        if self.database_url:
-            return self.database_url
-        # Fallback to local SQLite file for zero-setup dev execution if postgres not supplied
-        db_path = (self.project_root / "data" / "fxmind.db").resolve()
-        db_path.parent.mkdir(parents=True, exist_ok=True)
-        return f"sqlite+aiosqlite:///{db_path.as_posix()}"
-
-    @property
-    def db_url_sync(self) -> str:
-        """Synchronous DB URL for Alembic migrations."""
-        return self.db_url.replace("+aiosqlite", "")
+    mongodb_uri: Optional[str] = None
+    mongodb_database: str = "fxmind"
 
     # ── API Server ───────────────────────────────
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     api_workers: int = 1
-    cors_origins: str = (
-        "http://localhost:3000,http://127.0.0.1:3000,http://localhost:3001,http://127.0.0.1:3001,"
-        "http://172.20.10.4:3000,http://172.20.10.4:3001,http://0.0.0.0:3000,http://0.0.0.0:3001"
-    )
-    cors_origin_regex: str = r"https?://(localhost|127\.0\.0\.1|0\.0\.0\.0|172\.\d+\.\d+\.\d+|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+)(:\d+)?"
+    cors_origins: str = "http://localhost:3000,http://127.0.0.1:3000"
+    cors_origin_regex: Optional[str] = None
 
     @property
     def cors_origin_list(self) -> list[str]:
         return [origin.strip() for origin in self.cors_origins.split(",") if origin.strip()]
 
+    @model_validator(mode="after")
+    def validate_production_settings(self) -> "Settings":
+        if self.app_env is AppEnv.PRODUCTION:
+            if self.debug:
+                raise ValueError("DEBUG must be false in production.")
+            if self.broker_features_enabled:
+                raise ValueError(
+                    "BROKER_FEATURES_ENABLED must be false in production until broker actions are secured."
+                )
+            if not self.mongodb_uri or not self.mongodb_uri.strip():
+                raise ValueError("MONGODB_URI must be set in production.")
+            if len(self.jwt_secret_key) < 32 or self.jwt_secret_key.startswith("replace-with-"):
+                raise ValueError(
+                    "Set JWT_SECRET_KEY to a unique random value of at least 32 characters."
+                )
+            if not self.cors_origin_list or any(
+                not origin.startswith("https://") for origin in self.cors_origin_list
+            ):
+                raise ValueError(
+                    "Set CORS_ORIGINS to the HTTPS origin of the deployed frontend."
+                )
+        return self
+
     # ── JWT Authentication ───────────────────────
-    jwt_secret_key: str = "change-me-to-a-different-random-string"
+    jwt_secret_key: str = ""
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 7

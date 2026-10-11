@@ -1,7 +1,5 @@
 """
-Models package — exports all SQLAlchemy models.
-
-Import all models here so Alembic autogenerate can discover them.
+Models package — exports MongoDB document models.
 """
 
 from app.models.user import User

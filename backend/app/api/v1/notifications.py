@@ -4,13 +4,17 @@ Notifications & Telegram Alerts REST Endpoints.
 
 from __future__ import annotations
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from pydantic import BaseModel
-from typing import Optional
 
+from app.api.deps import require_authenticated_user_features
 from app.services.telegram_service import telegram_service
 
-router = APIRouter(prefix="/notifications", tags=["notifications"])
+router = APIRouter(
+    prefix="/notifications",
+    tags=["notifications"],
+    dependencies=[Depends(require_authenticated_user_features)],
+)
 
 
 class TelegramConfigRequest(BaseModel):

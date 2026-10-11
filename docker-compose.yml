@@ -1,76 +1,18 @@
-version: "3.9"
-
 services:
-  db:
-    image: postgres:16-alpine
-    container_name: fxmind-db
-    restart: unless-stopped
+  mongo:
+    image: mongo:8.0
+    container_name: fxmind-mongo
     environment:
-      POSTGRES_DB: ${POSTGRES_DB:-fxmind}
-      POSTGRES_USER: ${POSTGRES_USER:-fxmind}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fxmind_dev_password}
+      MONGO_INITDB_DATABASE: fxmind
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      - "127.0.0.1:27017:27017"
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - mongodata:/data/db
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-fxmind}"]
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
-    container_name: fxmind-api
-    restart: unless-stopped
-    ports:
-      - "${API_PORT:-8000}:8000"
-    environment:
-      - DATABASE_URL=postgresql+asyncpg://${POSTGRES_USER:-fxmind}:${POSTGRES_PASSWORD:-fxmind_dev_password}@db:5432/${POSTGRES_DB:-fxmind}
-      - APP_ENV=${APP_ENV:-development}
-      - DEMO_MODE=${DEMO_MODE:-true}
-      - SECRET_KEY=${SECRET_KEY:-change-me-to-a-random-string-in-production}
-      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-change-me-to-a-different-random-string}
-      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:3000}
-      - LOG_LEVEL=${LOG_LEVEL:-INFO}
-      - MODEL_ARTIFACTS_DIR=/app/ml/artifacts
-    volumes:
-      - ./apps/api:/app/apps/api
-      - ./ml:/app/ml
-      - ./data:/app/data
-      - ./configs:/app/configs
-      - ./scripts:/app/scripts
-      - ./migrations:/app/migrations
-    depends_on:
-      db:
-        condition: service_healthy
-    command: >
-      uvicorn apps.api.app.main:app 
-      --host 0.0.0.0 
-      --port 8000 
-      --reload
-
-  web:
-    build:
-      context: ./apps/web
-      dockerfile: Dockerfile
-    container_name: fxmind-web
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://localhost:8000
-      - NEXT_PUBLIC_WS_URL=ws://localhost:8000
-      - NEXT_PUBLIC_APP_NAME=FXMind
-    volumes:
-      - ./apps/web:/app
-      - /app/node_modules
-      - /app/.next
-    depends_on:
-      - api
-    command: npm run dev
-
 volumes:
-  pgdata:
+  mongodata:

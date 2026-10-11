@@ -13,10 +13,11 @@ from __future__ import annotations
 
 from datetime import datetime, timezone, timedelta
 from typing import Optional
-from sqlalchemy import select, desc
-from sqlalchemy.ext.asyncio import AsyncSession
+from pymongo.asynchronous.database import AsyncDatabase
 
 from app.api.v1.logs import add_system_log
+from app.models.base import from_mongo
+from app.models.signal import Signal
 from app.services.signal_service import update_signal_outcome
 
 
@@ -147,7 +148,7 @@ class PaperTradingEngine:
         current_price: float,
         high: Optional[float] = None,
         low: Optional[float] = None,
-        db: Optional[AsyncSession] = None,
+        db: Optional[AsyncDatabase] = None,
     ) -> list[dict]:
         """
         Evaluate open paper trades against current live price.
@@ -260,20 +261,22 @@ class PaperTradingEngine:
         """Return all active paper positions."""
         return self.open_positions
 
-    async def get_history_from_db(self, db: AsyncSession, limit: int = 50) -> list[dict]:
+    async def get_history_from_db(self, db: AsyncDatabase, limit: int = 50) -> list[dict]:
         """
         Query closed trade history directly from the DB.
         Returns signals that have an outcome set (TARGET_HIT, STOP_HIT, EXPIRED).
         """
-        from app.models.signal import Signal
-        stmt = (
-            select(Signal)
-            .where(Signal.outcome.isnot(None))
-            .order_by(desc(Signal.outcome_timestamp))
+        cursor = (
+            db[Signal.collection]
+            .find({"outcome": {"$ne": None}})
+            .sort("outcome_timestamp", -1)
             .limit(limit)
         )
-        result = await db.execute(stmt)
-        signals = result.scalars().all()
+        signals = [
+            signal
+            for document in await cursor.to_list(length=limit)
+            if (signal := from_mongo(Signal, document)) is not None
+        ]
 
         history = []
         for s in signals:

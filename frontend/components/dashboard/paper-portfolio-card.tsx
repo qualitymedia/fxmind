@@ -45,7 +45,7 @@ function outcomeBadgeClass(status: string) {
 
 function formatScrapPnl(pips: number, usdValue?: number) {
   const safePips = Number.isFinite(pips) ? pips : 0;
-  const safeUsd = Number.isFinite(usdValue) ? usdValue : 0;
+  const safeUsd = usdValue !== undefined && Number.isFinite(usdValue) ? usdValue : 0;
   const cappedPips = Math.sign(safePips || 0) * Math.min(Math.abs(safePips), 1.5);
   const cappedUsd = Math.sign(safeUsd || 0) * Math.min(Math.abs(safeUsd), 1.5);
   return {
