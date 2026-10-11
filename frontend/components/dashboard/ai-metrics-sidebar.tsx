@@ -4,7 +4,6 @@ interface PatternItem {
   name: string;
   type: string;
   bias: string;
-  icon: string;
 }
 
 interface AIMetricsSidebarProps {
@@ -29,7 +28,6 @@ interface AIMetricsSidebarProps {
   riskReward?: number;
 }
 
-/* ── Compact Circular Gauge ─────────────────────────────────── */
 function CircularGauge({
   value,
   label,
@@ -124,15 +122,13 @@ export function AIMetricsSidebar({
             name: r.reason,
             type: "SMC",
             bias: r.sentiment === "SUPPORTIVE" ? bias : "NEUTRAL",
-            icon: "⚡",
           }));
 
   return (
     <div className="bg-card border border-border rounded-xl shadow-card flex flex-col overflow-hidden">
-      {/* Header — Shifted upward to top right of dashboard */}
       <div className="px-3 py-2 border-b border-border flex items-center justify-between bg-card-secondary/40">
         <h3 className="text-xs font-bold font-display text-text-primary uppercase tracking-wider">
-          AI INSIGHT
+          MODEL INSIGHT
         </h3>
         <span className={`text-xs font-bold uppercase ${biasColor}`}>
           {bias}
@@ -140,7 +136,6 @@ export function AIMetricsSidebar({
       </div>
 
       <div className="p-3 space-y-3">
-        {/* Status + Regime */}
         <div className="flex items-center justify-between">
           <span
             className={`inline-block px-2 py-0.5 rounded text-[10px] font-bold border ${statusColor}`}
@@ -150,7 +145,6 @@ export function AIMetricsSidebar({
           <span className="text-[10px] text-text-muted font-mono">{regime}</span>
         </div>
 
-        {/* Circular Gauges */}
         {bullProbability != null &&
           bearProbability != null &&
           neutralProbability != null && (

@@ -278,7 +278,7 @@ export default function PerformancePage() {
               <div className="p-3 bg-background border border-border rounded-lg">
                 <span className="text-text-secondary block text-[10px]">VALIDATION HISTORY</span>
                 <span className="font-bold text-text-primary block mt-0.5">
-                  Multi-Year Institutional Tick History
+                  Historical trade performance
                 </span>
               </div>
               <div className="p-3 bg-background border border-border rounded-lg">

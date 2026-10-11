@@ -120,7 +120,6 @@ export function BrokerModal({
           gap: "20px",
         }}
       >
-        {/* Top Glowing Gradient Accent Line */}
         <div
           style={{
             position: "absolute",
@@ -133,7 +132,6 @@ export function BrokerModal({
           }}
         />
 
-        {/* Header */}
         <div
           style={{
             display: "flex",
@@ -170,10 +168,10 @@ export function BrokerModal({
                   letterSpacing: "-0.02em",
                 }}
               >
-                MetaTrader 5 Auto-Pilot Link
+                MetaTrader 5 connection
               </h2>
               <p style={{ fontSize: "12px", margin: "2px 0 0", color: "#9ca3af" }}>
-                Autonomous Algorithmic Execution &amp; Live Broker Synchronization
+                Connect or disconnect a MetaTrader account
               </p>
             </div>
           </div>
@@ -205,9 +203,7 @@ export function BrokerModal({
         </div>
 
         {isConnected && account ? (
-          /* Connected State */
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
-            {/* Live Status Header */}
             <div
               style={{
                 display: "flex",
@@ -272,7 +268,6 @@ export function BrokerModal({
               </div>
             </div>
 
-            {/* AI Auto-Trading Master Switch Card */}
             <div
               style={{
                 padding: "16px",
@@ -288,7 +283,7 @@ export function BrokerModal({
                 <div style={{ flex: 1, minWidth: "220px" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "4px" }}>
                     <span style={{ fontSize: "14px", fontWeight: 800, color: "#f9fafb" }}>
-                      AI Auto-Trading Mode
+                      Automated trading
                     </span>
                     {autoTrading ? (
                       <span
@@ -324,7 +319,7 @@ export function BrokerModal({
                   </div>
                   <p style={{ margin: 0, fontSize: "12px", color: "#9ca3af", lineHeight: "1.5" }}>
                     {autoTrading
-                      ? "AI automatically executes trades on your MT5 account for every confirmed high-confidence signal."
+                      ? "Trades are sent to your connected MT5 account when an eligible signal is confirmed."
                       : "Auto-trading is paused. If you want to trade manually, place orders directly in your MT5 desktop app."}
                   </p>
                 </div>
@@ -453,7 +448,6 @@ export function BrokerModal({
             </div>
           </div>
         ) : (
-          /* Disconnected / Connect Form State */
           <div style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
             <p style={{ fontSize: "12px", color: "#9ca3af", margin: 0, lineHeight: "1.5" }}>
               Connect any MetaTrader 5 broker (Demo or Live) to enable 100% autonomous AI execution. If MT5 is already open on this computer, credentials link automatically.

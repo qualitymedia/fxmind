@@ -49,7 +49,7 @@ export function VolumeProfileCard({ volumeProfile, currentPrice }: VolumeProfile
             </div>
             <div>
               <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted block leading-none">
-                Institutional Volume Profile
+                Volume Profile
               </span>
               <span className="text-xs font-semibold text-text-primary">
                 24H Rolling POC & 70% Value Area

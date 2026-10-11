@@ -180,7 +180,7 @@ export default function SettingsPage() {
               <div className="bg-card border border-border rounded-2xl p-6 shadow-sm space-y-3 text-xs text-text-secondary">
                 <h4 className="font-bold text-text-primary flex items-center gap-2">
                   <ShieldCheck className="w-4 h-4 text-primary" />
-                  Institutional Guardrails
+                  Trading safeguards
                 </h4>
                 <p className="leading-relaxed">
                   Every signal is gated by London/NY liquidity filters, spread caps, and high-impact macro calendar schedules to protect accounts during erratic volatility.

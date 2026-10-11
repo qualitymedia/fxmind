@@ -72,8 +72,6 @@ interface HistoryData {
   ai_win_rate: number;
 }
 
-// ── Formatting Helpers ────────────────────────────────────────────────────────
-
 function fmtCur(v: number, cur = "USD") {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -98,8 +96,6 @@ function elapsed(unix: number) {
   if (s < 86400) return Math.floor(s / 3600) + "h ago";
   return Math.floor(s / 86400) + "d ago";
 }
-
-// ── Main Page Component ───────────────────────────────────────────────────────
 
 export default function TradePage() {
   const [account, setAccount] = useState<AccountInfo | null>(null);
@@ -212,7 +208,7 @@ export default function TradePage() {
         ) : !account ? (
           <DisconnectedState onOpenModal={() => setIsModalOpen(true)} />
         ) : (
-          <PersonalizedInstitutionalTerminal
+          <BrokerAccountOverview
             account={account}
             autoTrading={autoTrading}
             onToggleAuto={handleToggleAuto}
@@ -236,7 +232,7 @@ export default function TradePage() {
   );
 }
 
-// ── Disconnected State Component ──────────────────────────────────────────────
+// Disconnected broker state
 
 function DisconnectedState({ onOpenModal }: { onOpenModal: () => void }) {
   return (
@@ -257,13 +253,13 @@ function DisconnectedState({ onOpenModal }: { onOpenModal: () => void }) {
       >
         <div style={{ flex: 1 }}>
           <div style={{ display: "inline-flex", alignItems: "center", gap: "6px", padding: "4px 10px", borderRadius: "6px", background: "rgba(245, 158, 11, 0.15)", border: "1px solid rgba(245, 158, 11, 0.3)", color: "#fbbf24", fontSize: "11px", fontWeight: 800, textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: "10px" }}>
-            <Bot size={13} /> Cloud Auto-Pilot Gateway &bull; COMING SOON
+            <Bot size={13} /> Broker connection in development
           </div>
           <h1 style={{ fontSize: "22px", fontWeight: 800, margin: "0 0 8px", color: "#f8fafc", letterSpacing: "-0.02em" }}>
             Automated Broker Execution Engine
           </h1>
           <p style={{ margin: 0, fontSize: "13px", color: "#94a3b8", lineHeight: "1.6", maxWidth: "620px" }}>
-            We are preparing the 24/7 Cloud MetaTrader gateway so you can connect your broker credentials and trade autonomously without keeping your PC running.
+            Cloud broker connections are not available yet. Market analysis and signal history remain available.
           </p>
         </div>
 
@@ -292,10 +288,10 @@ function DisconnectedState({ onOpenModal }: { onOpenModal: () => void }) {
       {/* Why AI filters setups Card */}
       <div style={{ background: "#111827", border: "1px solid #1f293d", borderRadius: "14px", padding: "18px 22px" }}>
         <h3 style={{ fontSize: "14px", fontWeight: 800, color: "#f8fafc", margin: "0 0 10px", display: "flex", alignItems: "center", gap: "8px" }}>
-          <ShieldCheck size={16} style={{ color: "#60a5fa" }} /> Why AI Only Executes On Valid Setups
+          <ShieldCheck size={16} style={{ color: "#60a5fa" }} /> Execution safeguards
         </h3>
         <p style={{ fontSize: "12px", color: "#94a3b8", margin: "0 0 14px", lineHeight: "1.5" }}>
-          The ensemble model uses strict institutional filters so capital is never risked on low-probability market noise:
+          Automated execution uses signal, market-session, and risk checks before placing an order.
         </p>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px" }}>
           <div style={{ background: "#090d16", border: "1px solid #1e293b", borderRadius: "10px", padding: "12px 14px" }}>
@@ -320,9 +316,7 @@ function DisconnectedState({ onOpenModal }: { onOpenModal: () => void }) {
   );
 }
 
-// ── Personalized Institutional Terminal Component ─────────────────────────────
-
-function PersonalizedInstitutionalTerminal({
+function BrokerAccountOverview({
   account,
   autoTrading,
   onToggleAuto,
@@ -486,7 +480,7 @@ function PersonalizedInstitutionalTerminal({
             }}
           >
             <Power size={13} />
-            {toggling ? "Processing..." : autoTrading ? "AI AUTO-PILOT ON" : "AI PAUSED"}
+            {toggling ? "Processing..." : autoTrading ? "AUTO-TRADING ON" : "AUTO-TRADING PAUSED"}
           </button>
 
           <button
@@ -632,7 +626,7 @@ function PersonalizedInstitutionalTerminal({
                 No active open positions
               </div>
               <div style={{ fontSize: "12px", marginTop: "4px" }}>
-                AI Auto-Pilot is armed and scanning GBP/USD price action for high-probability setups.
+                Automated trading is enabled for eligible GBP/USD signals.
               </div>
             </div>
           ) : (
@@ -683,7 +677,7 @@ function PersonalizedInstitutionalTerminal({
                       <td style={{ padding: "10px 14px", color: "#64748b", fontSize: "11px" }}>{elapsed(p.open_time)}</td>
                       <td style={{ padding: "10px 14px" }}>
                         <span style={{ fontSize: "10px", fontWeight: 700, color: "#60a5fa", background: "rgba(59, 130, 246, 0.12)", padding: "2px 6px", borderRadius: "4px" }}>
-                          AI AUTO-PILOT
+                          AUTOMATED
                         </span>
                       </td>
                     </tr>
@@ -744,7 +738,7 @@ function PersonalizedInstitutionalTerminal({
                     </td>
                     <td style={{ padding: "10px 14px" }}>
                       <span style={{ fontSize: "10px", fontWeight: 700, color: "#94a3b8", background: "#1f293d", padding: "2px 6px", borderRadius: "4px" }}>
-                        {t.is_ai ? "AI AUTO-PILOT" : "MANUAL"}
+                        {t.is_ai ? "AUTOMATED" : "MANUAL"}
                       </span>
                     </td>
                   </tr>

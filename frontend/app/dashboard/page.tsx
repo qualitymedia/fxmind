@@ -186,7 +186,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* 4. Institutional Analytics & Live Execution Row */}
+          {/* Analytics and paper-trading row */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <VolumeProfileCard
               volumeProfile={volumeProfile}

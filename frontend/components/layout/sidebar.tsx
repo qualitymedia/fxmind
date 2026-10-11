@@ -143,7 +143,6 @@ export function Sidebar() {
 
         {/* Lower Sidebar Section */}
         <div className="space-y-2 pt-2.5 border-t border-border">
-          {/* Broker Auto-Pilot Card */}
           <div
             onClick={() => router.push("/trade")}
             className="p-2.5 rounded-xl bg-gradient-to-b from-primary/10 via-card to-card border border-primary/25 hover:border-primary/50 cursor-pointer transition-all shadow-sm group"
