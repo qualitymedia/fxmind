@@ -3,7 +3,7 @@ services:
     name: fxmind-api
     runtime: python
     buildCommand: pip install -r backend/requirements.txt
-    startCommand: PYTHONPATH=backend uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    startCommand: cd backend && PYTHONPATH=. uvicorn app.main:app --host 0.0.0.0 --port $PORT
     healthCheckPath: /api/v1/health
     envVars:
       - key: PYTHON_VERSION

@@ -45,6 +45,8 @@ ml/artifacts/runs/
 *.h5
 *.pkl
 *.joblib
+!backend/ml/artifacts/gbpusd-ensemble-v2.0/model.pkl
+!backend/ml/artifacts/gbpusd-ensemble-v2.0/calibrator.pkl
 
 # Keep directory structure
 !data/raw/.gitkeep
