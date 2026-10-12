@@ -7,6 +7,7 @@ import pytest
 from httpx import AsyncClient
 
 from ml.data.validation import validate_market_dataframe
+from ml.artifacts.saver import ModelArtifactSaver
 from ml.inference.service import InferenceService
 
 
@@ -45,6 +46,16 @@ def test_market_dataframe_rejects_invalid_price_data():
     assert report.is_valid is False
     assert report.invalid_ohlc_count >= 1
     assert "Invalid OHLC" in report.error_messages[0]
+
+
+def test_model_bundle_loads_outside_backend_working_directory(monkeypatch, tmp_path):
+    """Model loading should not depend on Render's configured working directory."""
+    monkeypatch.chdir(tmp_path)
+
+    bundle = ModelArtifactSaver().load_bundle()
+
+    assert bundle["version"] == "gbpusd-ensemble-v2.0"
+    assert len(bundle["schema"].feature_names) == 130
 
 
 def test_inference_service_has_regime_aware_ai_logic():

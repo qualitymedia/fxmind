@@ -22,7 +22,7 @@ Never fake a signal.
 from __future__ import annotations
 
 from datetime import datetime, timezone
-import json
+from pathlib import Path
 
 import numpy as np
 import pandas as pd
@@ -55,7 +55,7 @@ def is_forex_market_closed(dt: datetime) -> bool:
 class InferenceService:
     """Production Inference Service."""
 
-    def __init__(self, artifacts_dir: str = "./ml/artifacts"):
+    def __init__(self, artifacts_dir: str | Path | None = None):
         self.saver = ModelArtifactSaver(base_dir=artifacts_dir)
         self.regime_detector = RegimeDetector()
         self.current_bundle = None
@@ -69,7 +69,8 @@ class InferenceService:
                 v = self.current_bundle.get("version", version or "unknown")
                 print(f"[InferenceService] Loaded model bundle: {v}")
                 return
-            except Exception:
+            except Exception as exc:
+                print(f"[InferenceService] Failed to load model bundle {version or 'latest'}: {exc}")
                 continue
         self.current_bundle = None
         print("[InferenceService] WARNING: No model bundle found.")
@@ -479,7 +480,6 @@ class InferenceService:
         # All strategies: SL multiplier is fixed, TP multiplier is dynamic by confidence.
         # This guarantees TP distance > SL distance (always positive R:R > 1.0).
         tp_mult = dynamic_tp_mult(confidence)
-        sl_mult_base = 0.8  # Will be adjusted per strategy
 
         if strategy_type == "TRAILING_LIMIT_ENTRY":
             sl_m = 1.1

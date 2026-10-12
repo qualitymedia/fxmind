@@ -10,13 +10,14 @@ from pymongo.errors import PyMongoError
 from pymongo.asynchronous.database import AsyncDatabase
 
 from app.core.config import get_settings
+from app.core.logging import get_logger
 from app.db.database import get_db
 from app.models.signal import Signal
-from app.models.model_version import ModelVersion
 from app.schemas.common import HealthResponse
 from ml.artifacts.saver import ModelArtifactSaver
 
 router = APIRouter(tags=["health"])
+logger = get_logger("fxmind.health")
 
 
 @router.get("/health", response_model=HealthResponse)
@@ -50,17 +51,14 @@ async def health_check(database: AsyncDatabase = Depends(get_db)) -> HealthRespo
             else:
                 market_status = "no_data"
 
-        model = await database[ModelVersion.collection].find_one(
-            {"state": "PRODUCTION"},
-            projection={"version": 1},
-            sort=[("created_at", -1)],
-        )
-        model_version = model.get("version") if model else None
-        if model_version is None:
+        try:
             bundle = ModelArtifactSaver().load_bundle()
-            model_version = bundle.get("version") if isinstance(bundle, dict) else None
+            model_version = bundle.get("version")
             if model_version is None:
-                model_status = "no_model"
+                model_status = "unavailable"
+        except Exception:
+            logger.exception("model_artifact_load_failed")
+            model_status = "unavailable"
 
         signal = await database[Signal.collection].find_one(
             {"symbol": "GBPUSD"},
@@ -74,7 +72,7 @@ async def health_check(database: AsyncDatabase = Depends(get_db)) -> HealthRespo
         model_status = "unknown"
 
     overall = "healthy"
-    if db_status != "healthy" or market_status != "healthy":
+    if db_status != "healthy" or market_status != "healthy" or model_status != "healthy":
         overall = "degraded"
 
     return HealthResponse(

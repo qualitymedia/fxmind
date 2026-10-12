@@ -22,8 +22,12 @@ from ml.calibration.calibrator import ProbabilityCalibrator
 class ModelArtifactSaver:
     """Saves and loads all model bundle artifacts."""
 
-    def __init__(self, base_dir: str | Path = "./ml/artifacts"):
-        self.base_dir = Path(base_dir)
+    def __init__(self, base_dir: str | Path | None = None):
+        self.base_dir = (
+            Path(base_dir)
+            if base_dir is not None
+            else Path(__file__).resolve().parents[2] / "ml" / "artifacts"
+        )
         self.base_dir.mkdir(parents=True, exist_ok=True)
 
     def get_version_dir(self, version: str) -> Path:
