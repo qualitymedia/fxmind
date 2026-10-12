@@ -181,7 +181,11 @@ class PaperTradingEngine:
             pos["unrealized_pnl_usd"] = round(pnl_pips * pip_val, 2)
 
             # Real-time expiration check: 6 hours from open time
-            opened_at = datetime.fromisoformat(pos["opened_at"]).replace(tzinfo=timezone.utc)
+            opened_at = datetime.fromisoformat(pos["opened_at"])
+            if opened_at.tzinfo is None:
+                opened_at = opened_at.replace(tzinfo=timezone.utc)
+            else:
+                opened_at = opened_at.astimezone(timezone.utc)
             elapsed_secs = (now - opened_at).total_seconds()
             is_expired = elapsed_secs >= 6 * 3600  # 6 hours
 
@@ -210,6 +214,36 @@ class PaperTradingEngine:
                     final_pnl_pips = (entry - current_price) * 10000.0
 
             if outcome:
+                if db is None or not pos.get("signal_id"):
+                    add_system_log(
+                        "PAPER_TRADING",
+                        f"Cannot persist close for {pos.get('position_id')}; keeping it open until MongoDB is available.",
+                        "ERROR",
+                    )
+                    still_open.append(pos)
+                    continue
+
+                try:
+                    updated_signal = await update_signal_outcome(
+                        signal_id=pos["signal_id"],
+                        outcome=outcome,
+                        pnl=final_pnl_pips,
+                        db=db,
+                    )
+                    if updated_signal is None:
+                        raise RuntimeError(
+                            f"Signal ID={pos['signal_id']} was not found while saving its outcome."
+                        )
+                except Exception as exc:
+                    add_system_log(
+                        "PAPER_TRADING",
+                        f"MongoDB outcome persistence failed for {pos.get('position_id')}: {exc}. "
+                        "The position remains open for retry.",
+                        "ERROR",
+                    )
+                    still_open.append(pos)
+                    continue
+
                 closed_at = datetime.now(timezone.utc).isoformat()
                 capped_pips = self._scrap_trade_value(final_pnl_pips, cap=1.5)
                 realized_pnl = round(capped_pips * 0.1, 2)
@@ -224,18 +258,6 @@ class PaperTradingEngine:
 
                 self.closed_positions.append(pos)
                 closed_this_tick.append(pos)
-
-                # Persist outcome to DB
-                if db and pos.get("signal_id"):
-                    try:
-                        await update_signal_outcome(
-                            signal_id=pos["signal_id"],
-                            outcome=outcome,
-                            pnl=final_pnl_pips,
-                            db=db,
-                        )
-                    except Exception as e:
-                        print(f"[PAPER TRADING] DB outcome update error: {e}")
 
                 # Dispatch Telegram alert
                 try:
@@ -261,6 +283,111 @@ class PaperTradingEngine:
         """Return all active paper positions."""
         return self.open_positions
 
+    def _position_from_signal_document(self, document: dict) -> Optional[dict]:
+        """Rebuild an open paper position from its durable signal document."""
+        signal = from_mongo(Signal, document)
+        if (
+            signal is None
+            or signal.status != "ACTIVE"
+            or signal.outcome is not None
+            or signal.direction not in ("LONG", "SHORT")
+            or signal.stop_loss is None
+            or signal.take_profit is None
+            or (signal.entry_low is None and signal.entry_high is None)
+        ):
+            return None
+
+        if signal.entry_low is not None and signal.entry_high is not None:
+            entry_price = round((signal.entry_low + signal.entry_high) / 2.0, 5)
+        else:
+            entry_price = round(signal.entry_low or signal.entry_high or 0.0, 5)
+
+        opened_at = signal.paper_opened_at or signal.timestamp
+        if opened_at.tzinfo is None:
+            opened_at = opened_at.replace(tzinfo=timezone.utc)
+        else:
+            opened_at = opened_at.astimezone(timezone.utc)
+
+        lot_size = self.calculate_lot_size(signal.stop_loss, entry_price)
+        expires_at = opened_at + timedelta(hours=6)
+        return {
+            "position_id": f"PAPER-{signal.id}",
+            "signal_id": signal.id,
+            "symbol": signal.symbol,
+            "direction": signal.direction,
+            "strategy_type": signal.strategy_type or "TREND_FOLLOWING",
+            "entry_price": entry_price,
+            "stop_loss": signal.stop_loss,
+            "take_profit": signal.take_profit,
+            "lot_size": lot_size,
+            "pip_value_usd": lot_size * 10.0,
+            "risk_reward": signal.risk_reward,
+            "opened_at": opened_at.isoformat(),
+            "expires_at": expires_at.isoformat(),
+            "duration_hours": 6,
+            "status": "OPEN",
+            "current_price": entry_price,
+            "unrealized_pnl_pips": 0.0,
+            "unrealized_pnl_usd": 0.0,
+            "model_confidence": signal.confidence,
+            "trade_mode": "SCRAP",
+            "is_scrap_trade": True,
+        }
+
+    async def restore_open_positions(self, db: AsyncDatabase) -> int:
+        """Restore unfinished paper positions after a process restart."""
+        cursor = db[Signal.collection].find(
+            {
+                "status": "ACTIVE",
+                "outcome": None,
+                "direction": {"$in": ["LONG", "SHORT"]},
+                "stop_loss": {"$ne": None},
+                "take_profit": {"$ne": None},
+            }
+        ).sort("timestamp", 1)
+        documents = await cursor.to_list(length=None)
+        positions = [
+            position
+            for document in documents
+            if (position := self._position_from_signal_document(document)) is not None
+        ]
+        self.open_positions = positions
+        add_system_log(
+            "PAPER_TRADING",
+            f"Restored {len(positions)} open paper position(s) from MongoDB.",
+            "INFO",
+        )
+        return len(positions)
+
+    async def get_open_positions_from_db(self, db: AsyncDatabase) -> list[dict]:
+        """Return open positions from durable signals, including after a restart."""
+        cursor = db[Signal.collection].find(
+            {
+                "status": "ACTIVE",
+                "outcome": None,
+                "direction": {"$in": ["LONG", "SHORT"]},
+                "stop_loss": {"$ne": None},
+                "take_profit": {"$ne": None},
+            }
+        ).sort("timestamp", 1)
+        documents = await cursor.to_list(length=None)
+        cached = {
+            position.get("signal_id"): position for position in self.open_positions
+        }
+        positions = []
+        for document in documents:
+            position = self._position_from_signal_document(document)
+            if position is not None:
+                position.update(
+                    {
+                        key: cached[position["signal_id"]][key]
+                        for key in ("current_price", "unrealized_pnl_pips", "unrealized_pnl_usd")
+                        if position["signal_id"] in cached
+                    }
+                )
+                positions.append(position)
+        return positions
+
     async def get_history_from_db(self, db: AsyncDatabase, limit: int = 50) -> list[dict]:
         """
         Query closed trade history directly from the DB.
@@ -268,7 +395,7 @@ class PaperTradingEngine:
         """
         cursor = (
             db[Signal.collection]
-            .find({"outcome": {"$ne": None}})
+            .find({"outcome": {"$in": ["TARGET_HIT", "STOP_HIT", "EXPIRED"]}})
             .sort("outcome_timestamp", -1)
             .limit(limit)
         )
@@ -295,7 +422,7 @@ class PaperTradingEngine:
                 "signal_id": s.id,
                 "symbol": s.symbol,
                 "direction": s.direction or "LONG",
-                "strategy_type": None,
+                "strategy_type": s.strategy_type,
                 "entry_price": round(entry_price, 5),
                 "stop_loss": s.stop_loss,
                 "take_profit": s.take_profit,
@@ -312,6 +439,94 @@ class PaperTradingEngine:
                 "session": s.session_name,
             })
         return history
+
+    async def get_summary_from_db(self, db: AsyncDatabase) -> dict:
+        """Calculate paper-trading totals from durable closed and open signals."""
+        pipeline = [
+            {
+                "$match": {
+                    "outcome": {"$in": ["TARGET_HIT", "STOP_HIT", "EXPIRED"]},
+                    "$or": [
+                        {"entry_low": {"$ne": None}},
+                        {"entry_high": {"$ne": None}},
+                    ],
+                }
+            },
+            {
+                "$project": {
+                    "paper_pnl": {
+                        "$max": [
+                            -1.5,
+                            {
+                                "$min": [
+                                    1.5,
+                                    {"$ifNull": ["$outcome_pnl", 0.0]},
+                                ]
+                            },
+                        ]
+                    }
+                }
+            },
+            {
+                "$group": {
+                    "_id": None,
+                    "total_trades": {"$sum": 1},
+                    "wins": {
+                        "$sum": {"$cond": [{"$gt": ["$paper_pnl", 0]}, 1, 0]}
+                    },
+                    "gross_profit": {
+                        "$sum": {
+                            "$cond": [{"$gt": ["$paper_pnl", 0]}, "$paper_pnl", 0]
+                        }
+                    },
+                    "gross_loss": {
+                        "$sum": {
+                            "$cond": [
+                                {"$lt": ["$paper_pnl", 0]},
+                                {"$abs": "$paper_pnl"},
+                                0,
+                            ]
+                        }
+                    },
+                    "total_pnl_pips": {"$sum": "$paper_pnl"},
+                }
+            },
+        ]
+        result = await db[Signal.collection].aggregate(pipeline).to_list(length=1)
+        totals = result[0] if result else {}
+        open_trades = await db[Signal.collection].count_documents(
+            {
+                "status": "ACTIVE",
+                "outcome": None,
+                "direction": {"$in": ["LONG", "SHORT"]},
+                "stop_loss": {"$ne": None},
+                "take_profit": {"$ne": None},
+            }
+        )
+        history = await self.get_history_from_db(db, limit=20)
+
+        total = int(totals.get("total_trades", 0))
+        wins = int(totals.get("wins", 0))
+        gross_profit = float(totals.get("gross_profit", 0.0))
+        gross_loss = float(totals.get("gross_loss", 0.0))
+        total_pnl = float(totals.get("total_pnl_pips", 0.0))
+
+        return {
+            "total_trades": total,
+            "open_trades": open_trades,
+            "win_rate": round(wins / total, 3) if total else 0.0,
+            "profit_factor": (
+                round(gross_profit / gross_loss, 2)
+                if gross_loss
+                else (99.0 if gross_profit else 0.0)
+            ),
+            "total_pnl_pips": round(total_pnl, 1),
+            "current_equity": round(
+                self.initial_capital + total_pnl * 0.1,
+                2,
+            ),
+            "closed_positions": history,
+        }
 
     def get_closed_summary(self) -> dict:
         """Return aggregate paper trading statistics from in-memory closed positions."""

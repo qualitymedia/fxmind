@@ -48,6 +48,40 @@ def test_market_dataframe_rejects_invalid_price_data():
     assert "Invalid OHLC" in report.error_messages[0]
 
 
+@pytest.mark.asyncio
+async def test_market_provider_does_not_fabricate_quote_when_feed_is_unavailable(monkeypatch):
+    from ml.data.providers import yfinance_provider
+
+    monkeypatch.setattr(
+        yfinance_provider.yf,
+        "download",
+        lambda *_args, **_kwargs: pd.DataFrame(),
+    )
+    provider = yfinance_provider.YFinanceLiveProvider()
+
+    with pytest.raises(RuntimeError, match="No fresh market quote"):
+        await provider.get_latest_quote("GBPUSD")
+
+
+@pytest.mark.asyncio
+async def test_market_provider_rejects_stale_market_data(monkeypatch):
+    from ml.data.providers import yfinance_provider
+
+    stale_data = pd.DataFrame(
+        {"Close": [1.3200]},
+        index=[pd.Timestamp.now(tz="UTC") - pd.Timedelta(minutes=5)],
+    )
+    monkeypatch.setattr(
+        yfinance_provider.yf,
+        "download",
+        lambda *_args, **_kwargs: stale_data,
+    )
+    provider = yfinance_provider.YFinanceLiveProvider()
+
+    with pytest.raises(RuntimeError, match="No fresh market quote"):
+        await provider.get_latest_quote("GBPUSD")
+
+
 def test_model_bundle_loads_outside_backend_working_directory(monkeypatch, tmp_path):
     """Model loading should not depend on Render's configured working directory."""
     monkeypatch.chdir(tmp_path)

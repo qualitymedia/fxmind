@@ -39,6 +39,7 @@ class Signal(MongoDocument):
     entry_high: Optional[float] = None
     stop_loss: Optional[float] = None
     take_profit: Optional[float] = None
+    strategy_type: Optional[str] = None
     risk_reward: Optional[float] = None
     atr14: Optional[float] = None
     spread: Optional[float] = None
@@ -51,4 +52,5 @@ class Signal(MongoDocument):
     outcome: Optional[str] = None
     outcome_pnl: Optional[float] = None
     outcome_timestamp: Optional[datetime] = None
+    paper_opened_at: Optional[datetime] = None
     reasons: list[SignalReason] = Field(default_factory=list)

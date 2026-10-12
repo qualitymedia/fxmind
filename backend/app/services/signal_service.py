@@ -60,6 +60,7 @@ async def save_signal_to_db(signal_dict: dict, db: AsyncDatabase) -> Signal:
         entry_high=trade.get("entry_high"),
         stop_loss=trade.get("stop_loss"),
         take_profit=trade.get("take_profit"),
+        strategy_type=trade.get("strategy_type"),
         risk_reward=trade.get("risk_reward"),
         atr14=market.get("atr14"),
         spread=market.get("spread"),
@@ -98,6 +99,43 @@ async def update_signal_outcome(
         return_document=ReturnDocument.AFTER,
     )
     return from_mongo(Signal, result)
+
+
+async def update_signal_paper_opened_at(
+    signal_id: int,
+    opened_at: datetime,
+    db: AsyncDatabase,
+) -> bool:
+    """Persist the paper-trade open time so a worker restart can recover it."""
+    result = await db[Signal.collection].update_one(
+        {"_id": signal_id, "status": "ACTIVE", "outcome": None},
+        {"$set": {"paper_opened_at": opened_at}},
+    )
+    return result.matched_count == 1
+
+
+async def mark_signal_paper_trade_rejected(
+    signal_id: int,
+    db: AsyncDatabase,
+) -> bool:
+    """Mark a setup as not opened when paper-trade validation rejects it."""
+    result = await db[Signal.collection].update_one(
+        {"_id": signal_id, "status": "ACTIVE", "outcome": None},
+        {
+            "$set": {
+                "status": "NO_TRADE",
+                "updated_at": datetime.now(timezone.utc),
+            },
+            "$push": {
+                "reasons": {
+                    "category": "PAPER_TRADING",
+                    "reason": "Trade setup failed paper-trading validation and was not opened.",
+                    "sentiment": "NEUTRAL",
+                }
+            },
+        },
+    )
+    return result.matched_count == 1
 
 
 async def get_signals_from_db(

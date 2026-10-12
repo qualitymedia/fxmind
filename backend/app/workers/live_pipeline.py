@@ -23,7 +23,11 @@ from ml.inference.service import InferenceService
 from app.core.config import get_settings
 from app.websocket.manager import ws_manager
 from app.db.database import get_database
-from app.services.signal_service import save_signal_to_db
+from app.services.signal_service import (
+    save_signal_to_db,
+    mark_signal_paper_trade_rejected,
+    update_signal_paper_opened_at,
+)
 from app.services.paper_trading import paper_trading_engine
 from app.services.telegram_service import telegram_service
 from app.services.broker_service import broker_service
@@ -39,6 +43,7 @@ class LivePipelineWorker:
         self.inference_service = InferenceService()
         self.is_running = False
         self.last_processed_timestamp: Optional[datetime] = None
+        self._positions_restored = False
 
     async def start(self) -> None:
         """Start the background live analysis loop."""
@@ -88,6 +93,10 @@ class LivePipelineWorker:
             )
 
         database = get_database()
+        if not self._positions_restored:
+            restored = await paper_trading_engine.restore_open_positions(database)
+            self._positions_restored = True
+            print(f"[LIVE WORKER] Restored {restored} open paper position(s).")
         await paper_trading_engine.check_and_close_positions(
             current_price=current_price,
             high=quote.ask,
@@ -145,10 +154,49 @@ class LivePipelineWorker:
 
         # Open simulated paper trade if signal is ACTIVE
         if analysis_result.get("trade", {}).get("status") == "ACTIVE":
-            paper_trading_engine.open_trade(analysis_result, db_signal_id=db_signal_id)
+            if db_signal_id is None:
+                print(
+                    "[LIVE WORKER] Skipping paper trade because its signal "
+                    "could not be persisted to MongoDB."
+                )
+            else:
+                paper_position = paper_trading_engine.open_trade(
+                    analysis_result,
+                    db_signal_id=db_signal_id,
+                )
+                if paper_position is not None:
+                    try:
+                        persisted = await update_signal_paper_opened_at(
+                            signal_id=db_signal_id,
+                            opened_at=datetime.fromisoformat(paper_position["opened_at"]),
+                            db=database,
+                        )
+                        if not persisted:
+                            print(
+                                f"[LIVE WORKER] Could not persist paper open time "
+                                f"for signal ID={db_signal_id}; the durable signal "
+                                "timestamp will be used after a restart."
+                            )
+                    except Exception as exc:
+                        print(
+                            f"[LIVE WORKER] Paper open-time persistence error "
+                            f"for signal ID={db_signal_id}: {exc}. The durable signal "
+                            "timestamp will be used after a restart."
+                        )
+                else:
+                    try:
+                        await mark_signal_paper_trade_rejected(
+                            signal_id=db_signal_id,
+                            db=database,
+                        )
+                    except Exception as exc:
+                        print(
+                            f"[LIVE WORKER] Could not mark rejected paper setup "
+                            f"ID={db_signal_id} invalid: {exc}"
+                        )
 
             # --- AI Auto-Execution on real broker (if connected + auto-trading ON) ---
-            if get_settings().broker_features_enabled:
+            if db_signal_id is not None and get_settings().broker_features_enabled:
                 auto_result = broker_service.auto_execute_signal(analysis_result)
                 if auto_result.get("success"):
                     print(

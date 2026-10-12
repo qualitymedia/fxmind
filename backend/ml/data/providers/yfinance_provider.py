@@ -7,8 +7,9 @@ directly from live financial market feeds.
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import asyncio
+import math
 from typing import Sequence
 import pandas as pd
 import yfinance as yf
@@ -26,6 +27,8 @@ TICKER_MAP = {
 
 class YFinanceLiveProvider(MarketDataProvider):
     """Real market data provider using Yahoo Finance."""
+
+    MAX_CACHED_QUOTE_AGE = timedelta(minutes=2)
 
     def __init__(self):
         self._cache: dict[str, tuple[float, datetime]] = {}
@@ -53,28 +56,41 @@ class YFinanceLiveProvider(MarketDataProvider):
 
                 latest_row = df.iloc[-1]
                 mid = float(latest_row["close"])
-                spread = 0.00012 if symbol.upper() == "GBPUSD" else 0.00010
-                bid = round(mid - spread / 2, 5)
-                ask = round(mid + spread / 2, 5)
-                self._cache[symbol] = (mid, now)
-                return Quote(symbol=symbol, bid=bid, ask=ask, spread=spread, timestamp=now)
+                quote_time = pd.to_datetime(df.index[-1], utc=True).to_pydatetime()
+                quote_age = now - quote_time
+                if (
+                    math.isfinite(mid)
+                    and mid > 0
+                    and timedelta(0) <= quote_age <= self.MAX_CACHED_QUOTE_AGE
+                ):
+                    spread = 0.00012 if symbol.upper() == "GBPUSD" else 0.00010
+                    bid = round(mid - spread / 2, 5)
+                    ask = round(mid + spread / 2, 5)
+                    self._cache[symbol] = (mid, quote_time)
+                    return Quote(
+                        symbol=symbol,
+                        bid=bid,
+                        ask=ask,
+                        spread=spread,
+                        timestamp=quote_time,
+                    )
         except Exception as e:
             print(f"[YFinanceLiveProvider] Error fetching quote for {symbol}: {e}")
 
-        # Fallback to last cached real price if network hitch occurs
+        # Use a briefly cached real price during a transient network failure.
         if symbol in self._cache:
-            mid, _ = self._cache[symbol]
-        else:
-            mid = 1.3545 if symbol.upper() == "GBPUSD" else 1.1639
+            mid, cached_at = self._cache[symbol]
+            if now - cached_at <= self.MAX_CACHED_QUOTE_AGE:
+                spread = 0.00012 if symbol.upper() == "GBPUSD" else 0.00010
+                return Quote(
+                    symbol=symbol,
+                    bid=round(mid - spread / 2, 5),
+                    ask=round(mid + spread / 2, 5),
+                    spread=spread,
+                    timestamp=cached_at,
+                )
 
-        spread = 0.00012
-        return Quote(
-            symbol=symbol,
-            bid=round(mid - spread / 2, 5),
-            ask=round(mid + spread / 2, 5),
-            spread=spread,
-            timestamp=now,
-        )
+        raise RuntimeError(f"No fresh market quote available for {symbol}.")
 
     async def fetch_candles(
         self,

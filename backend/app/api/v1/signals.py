@@ -34,7 +34,7 @@ def _model_to_list_item(s: Signal) -> SignalListItem:
         confidence=s.confidence,
         regime=s.regime,
         direction=s.direction,
-        strategy_type=None,
+        strategy_type=s.strategy_type,
         entry_low=s.entry_low,
         entry_high=s.entry_high,
         stop_loss=s.stop_loss,
@@ -57,6 +57,7 @@ def _model_to_response(s: Signal) -> SignalResponse:
         trade={
             "status": s.status,
             "direction": s.direction,
+            "strategy_type": s.strategy_type,
             "entry_low": s.entry_low,
             "entry_high": s.entry_high,
             "stop_loss": s.stop_loss,
