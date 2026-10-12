@@ -33,11 +33,18 @@ export default function DashboardPage() {
     paperPositions,
     tradeHistory,
     loading,
+    refreshing,
     error,
+    lastRefresh,
   } = useDashboardData(timeframe);
 
   const signal = analysis?.signal ?? null;
   const market = analysis?.market ?? null;
+  const modelUnavailable = Boolean(
+    signal?.reasons?.some((reason) =>
+      reason.reason.toLowerCase().includes("ai analysis model is unavailable")
+    )
+  );
 
   const isWeekendClosed =
     signal?.market?.session === "WEEKEND_CLOSED" ||
@@ -83,6 +90,18 @@ export default function DashboardPage() {
             <span><strong>API Error:</strong> {error}</span>
           </div>
         )}
+        {modelUnavailable && (
+          <div className="mx-5 mt-3 flex items-center gap-2 bg-amber-500/10 border border-amber-500/20 rounded-lg px-4 py-2 text-xs text-amber-300">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+            <span>The analysis model is unavailable. Bias probabilities are hidden until predictions are available.</span>
+          </div>
+        )}
+        {lastRefresh && (
+          <div className="px-3 pt-3 text-right text-[10px] text-text-muted">
+            {refreshing ? "Updating market data…" : "Updated"}{" "}
+            {!refreshing && lastRefresh.toLocaleTimeString()}
+          </div>
+        )}
 
         {/* Main Dashboard Layout */}
         <main className="p-2.5 sm:p-4 md:p-5 space-y-3 md:space-y-4 max-w-[1800px] w-full mx-auto">
@@ -109,14 +128,19 @@ export default function DashboardPage() {
           {/* 2. Top KPI Row — 4 Core Cards (AI Bias, Regime, Signal Status, Setup Quality) */}
           <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4 md:gap-3.5">
             <AIBiasCard
-              bias={(signal?.bias as any) ?? "NEUTRAL"}
-              confidence={signal?.confidence ?? 0.3333}
+              bias={modelUnavailable ? undefined : signal?.bias}
+              confidence={modelUnavailable ? undefined : signal?.confidence}
+              loading={loading && !signal}
+              modelUnavailable={modelUnavailable}
             />
-            <RegimeCard regime={(signal?.regime as any) ?? "RANGING"} />
+            <RegimeCard
+              regime={modelUnavailable ? undefined : signal?.regime}
+            />
             <SignalCard
-              direction={(signal?.trade?.direction as any) ?? null}
+              direction={signal?.trade?.direction ?? null}
               status={signal?.trade?.status ?? "NO_TRADE"}
               strategyType={(signal?.trade as any)?.strategy_type ?? null}
+              loading={loading && !signal}
             />
             <SetupQualityCard
               quality={
@@ -166,12 +190,12 @@ export default function DashboardPage() {
             <div className="xl:col-span-1 flex flex-col gap-3">
               {/* AI INSIGHT */}
               <AIMetricsSidebar
-                bias={signal?.bias ?? "NEUTRAL"}
-                confidence={signal?.confidence ?? 0.33}
-                regime={signal?.regime ?? "RANGING"}
-                bullProbability={signal?.model?.bull_probability}
-                bearProbability={signal?.model?.bear_probability}
-                neutralProbability={signal?.model?.neutral_probability}
+                bias={modelUnavailable ? "UNAVAILABLE" : signal?.bias}
+                confidence={modelUnavailable ? undefined : signal?.confidence}
+                regime={modelUnavailable ? undefined : signal?.regime}
+                bullProbability={modelUnavailable ? undefined : signal?.model?.bull_probability}
+                bearProbability={modelUnavailable ? undefined : signal?.model?.bear_probability}
+                neutralProbability={modelUnavailable ? undefined : signal?.model?.neutral_probability}
                 patterns={signal?.patterns ?? []}
                 reasons={signal?.reasons ?? []}
                 tradeStatus={signal?.trade?.status ?? "NO_TRADE"}

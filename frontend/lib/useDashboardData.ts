@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { fetchApi } from "@/lib/api";
 import type { AnalysisResponse } from "@/types/signal";
 
@@ -144,29 +144,141 @@ export interface DashboardData {
   paperPositions: PaperPosition[];
   tradeHistory: TradeHistoryEntry[];
   loading: boolean;
+  refreshing: boolean;
   error: string | null;
   lastRefresh: Date | null;
   refetch: () => void;
 }
 
-const POLL_INTERVAL_MS = 15_000; // refresh every 15 seconds
+type DashboardSnapshot = Omit<
+  DashboardData,
+  "loading" | "refreshing" | "error" | "lastRefresh" | "refetch"
+>;
+
+interface DashboardCacheEntry {
+  snapshot: DashboardSnapshot;
+  lastRefresh: string;
+}
+
+const POLL_INTERVAL_MS = 30_000;
+const CACHE_FRESH_MS = 30_000;
+const dashboardCache = new Map<string, DashboardCacheEntry>();
+
+const emptySnapshot = (): DashboardSnapshot => ({
+  analysis: null,
+  candles: [],
+  performance: null,
+  model: null,
+  signals: [],
+  volumeProfile: null,
+  paperSummary: null,
+  paperPositions: [],
+  tradeHistory: [],
+});
+
+function isUnavailableAnalysis(analysis: AnalysisResponse | null): boolean {
+  return Boolean(
+    analysis?.signal?.reasons?.some((reason) =>
+      reason.reason?.toLowerCase().includes("ai analysis model is unavailable")
+    )
+  );
+}
+
+function readCache(timeframe: string): {
+  snapshot: DashboardSnapshot;
+  lastRefresh: Date | null;
+} {
+  const key = `fxmind:dashboard:v1:${timeframe}`;
+  let entry = dashboardCache.get(key);
+
+  if (!entry && typeof window !== "undefined") {
+    try {
+      const stored = window.sessionStorage.getItem(key);
+      if (stored) {
+        const parsed = JSON.parse(stored) as DashboardCacheEntry;
+        if (
+          parsed.lastRefresh &&
+          Number.isFinite(new Date(parsed.lastRefresh).getTime()) &&
+          parsed.snapshot
+        ) {
+          entry = parsed;
+          dashboardCache.set(key, entry);
+        }
+      }
+    } catch {
+      try {
+        window.sessionStorage.removeItem(key);
+      } catch {
+        return { snapshot: emptySnapshot(), lastRefresh: null };
+      }
+    }
+  }
+
+  if (!entry) {
+    return { snapshot: emptySnapshot(), lastRefresh: null };
+  }
+
+  return {
+    snapshot: {
+      ...emptySnapshot(),
+      ...entry.snapshot,
+      analysis: isUnavailableAnalysis(entry.snapshot.analysis)
+        ? null
+        : entry.snapshot.analysis,
+    },
+    lastRefresh: new Date(entry.lastRefresh),
+  };
+}
+
+function writeCache(
+  timeframe: string,
+  snapshot: DashboardSnapshot,
+  lastRefresh: Date
+): void {
+  const key = `fxmind:dashboard:v1:${timeframe}`;
+  const entry = { snapshot, lastRefresh: lastRefresh.toISOString() };
+  dashboardCache.set(key, entry);
+  try {
+    window.sessionStorage.setItem(key, JSON.stringify(entry));
+  } catch {
+    // Storage may be unavailable or full; in-memory caching still works.
+  }
+}
 
 export function useDashboardData(timeframe: string = "M15"): DashboardData {
-  const [analysis, setAnalysis] = useState<AnalysisResponse | null>(null);
-  const [candles, setCandles] = useState<CandleData[]>([]);
-  const [performance, setPerformance] = useState<PerformanceData | null>(null);
-  const [model, setModel] = useState<ModelData | null>(null);
-  const [signals, setSignals] = useState<SignalRow[]>([]);
-  const [volumeProfile, setVolumeProfile] = useState<VolumeProfileData | null>(null);
-  const [paperSummary, setPaperSummary] = useState<PaperSummaryData | null>(null);
-  const [paperPositions, setPaperPositions] = useState<PaperPosition[]>([]);
-  const [tradeHistory, setTradeHistory] = useState<TradeHistoryEntry[]>([]);
+  const [snapshot, setSnapshot] = useState(emptySnapshot);
+  const snapshotRef = useRef(snapshot);
+  const [snapshotTimeframe, setSnapshotTimeframe] = useState<string | null>(null);
+  const lastRefreshRef = useRef<Date | null>(null);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
-  const fetchAll = useCallback(async () => {
+  const fetchAll = useCallback(async (force = false) => {
+    const previousRefresh = lastRefreshRef.current;
+    if (
+      !force &&
+      previousRefresh &&
+      Date.now() - previousRefresh.getTime() < CACHE_FRESH_MS
+    ) {
+      setLoading(false);
+      return;
+    }
+
+    setRefreshing(true);
     try {
+      const updateOnSuccess = <T,>(
+        request: Promise<T>,
+        update: (current: DashboardSnapshot, value: T) => DashboardSnapshot
+      ) =>
+        request.then((value) => {
+          const nextSnapshot = update(snapshotRef.current, value);
+          snapshotRef.current = nextSnapshot;
+          setSnapshot(nextSnapshot);
+          return value;
+        });
+
       const [
         analysisData,
         candlesData,
@@ -178,61 +290,93 @@ export function useDashboardData(timeframe: string = "M15"): DashboardData {
         paperPosData,
         tradeHistoryData,
       ] = await Promise.allSettled([
-        fetchApi<AnalysisResponse>("/api/v1/analysis/GBPUSD"),
-        fetchApi<CandleData[]>(`/api/v1/market/GBPUSD/candles?timeframe=${timeframe}&limit=200`),
-        fetchApi<PerformanceData>("/api/v1/performance"),
-        fetchApi<ModelData>("/api/v1/models/current"),
-        fetchApi<SignalRow[]>("/api/v1/signals?limit=10"),
-        fetchApi<VolumeProfileData>("/api/v1/market/GBPUSD/volume-profile"),
-        fetchApi<PaperSummaryData>("/api/v1/paper-trading/summary"),
-        fetchApi<PaperPosition[]>("/api/v1/paper-trading/positions"),
-        fetchApi<TradeHistoryEntry[]>("/api/v1/paper-trading/history?limit=30"),
+        updateOnSuccess(
+          fetchApi<AnalysisResponse>("/api/v1/analysis/GBPUSD"),
+          (current, value) =>
+            isUnavailableAnalysis(value) && current.analysis
+              ? current
+              : { ...current, analysis: value }
+        ),
+        updateOnSuccess(
+          fetchApi<CandleData[]>(`/api/v1/market/GBPUSD/candles?timeframe=${timeframe}&limit=200`),
+          (current, value) => ({ ...current, candles: value })
+        ),
+        updateOnSuccess(
+          fetchApi<PerformanceData>("/api/v1/performance"),
+          (current, value) => ({ ...current, performance: value })
+        ),
+        updateOnSuccess(
+          fetchApi<ModelData>("/api/v1/models/current"),
+          (current, value) => ({ ...current, model: value })
+        ),
+        updateOnSuccess(
+          fetchApi<SignalRow[]>("/api/v1/signals?limit=10"),
+          (current, value) => ({ ...current, signals: value })
+        ),
+        updateOnSuccess(
+          fetchApi<VolumeProfileData>("/api/v1/market/GBPUSD/volume-profile"),
+          (current, value) => ({ ...current, volumeProfile: value })
+        ),
+        updateOnSuccess(
+          fetchApi<PaperSummaryData>("/api/v1/paper-trading/summary"),
+          (current, value) => ({ ...current, paperSummary: value })
+        ),
+        updateOnSuccess(
+          fetchApi<PaperPosition[]>("/api/v1/paper-trading/positions"),
+          (current, value) => ({ ...current, paperPositions: value })
+        ),
+        updateOnSuccess(
+          fetchApi<TradeHistoryEntry[]>("/api/v1/paper-trading/history?limit=30"),
+          (current, value) => ({ ...current, tradeHistory: value })
+        ),
       ]);
-
-      if (analysisData.status === "fulfilled") setAnalysis(analysisData.value);
-      if (candlesData.status === "fulfilled") setCandles(candlesData.value);
-      if (perfData.status === "fulfilled") setPerformance(perfData.value);
-      if (modelData.status === "fulfilled") setModel(modelData.value);
-      if (signalsData.status === "fulfilled") setSignals(signalsData.value);
-      if (vpData.status === "fulfilled") setVolumeProfile(vpData.value);
-      if (paperSumData.status === "fulfilled") setPaperSummary(paperSumData.value);
-      if (paperPosData.status === "fulfilled") setPaperPositions(paperPosData.value);
-      if (tradeHistoryData.status === "fulfilled") setTradeHistory(tradeHistoryData.value);
 
       // Surface first error encountered
       const firstError = [analysisData, candlesData, perfData, modelData].find(
         (r) => r.status === "rejected"
       ) as PromiseRejectedResult | undefined;
 
-      setError(firstError ? (firstError.reason as Error).message : null);
-      setLastRefresh(new Date());
-    } catch (err: any) {
-      setError(err.message ?? "Failed to fetch dashboard data");
+      setError(
+        firstError
+          ? firstError.reason instanceof Error
+            ? firstError.reason.message
+            : String(firstError.reason)
+          : null
+      );
+      const refreshedAt = new Date();
+      lastRefreshRef.current = refreshedAt;
+      setLastRefresh(refreshedAt);
+      writeCache(timeframe, snapshotRef.current, refreshedAt);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to fetch dashboard data");
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   }, [timeframe]);
 
   useEffect(() => {
-    fetchAll();
+    const cached = readCache(timeframe);
+    snapshotRef.current = cached.snapshot;
+    setSnapshotTimeframe(timeframe);
+    lastRefreshRef.current = cached.lastRefresh;
+    setSnapshot(cached.snapshot);
+    setLastRefresh(cached.lastRefresh);
+    setLoading(cached.lastRefresh === null);
+  }, [timeframe]);
+
+  useEffect(() => {
+    void fetchAll();
     const id = setInterval(fetchAll, POLL_INTERVAL_MS);
     return () => clearInterval(id);
   }, [fetchAll]);
 
   return {
-    analysis,
-    candles,
-    performance,
-    model,
-    signals,
-    volumeProfile,
-    paperSummary,
-    paperPositions,
-    tradeHistory,
+    ...(snapshotTimeframe === timeframe ? snapshot : emptySnapshot()),
     loading,
+    refreshing,
     error,
     lastRefresh,
-    refetch: fetchAll,
+    refetch: () => fetchAll(true),
   };
 }
-

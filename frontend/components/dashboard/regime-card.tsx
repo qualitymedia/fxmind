@@ -41,27 +41,29 @@ const REGIME_CONFIG = {
   },
 };
 
-export function RegimeCard({ regime = "RANGING" }: RegimeCardProps) {
-  const cfg = REGIME_CONFIG[regime] ?? REGIME_CONFIG.RANGING;
-  const Icon = cfg.icon;
+export function RegimeCard({ regime }: RegimeCardProps) {
+  const cfg = regime ? REGIME_CONFIG[regime] : null;
+  const Icon = cfg?.icon;
 
   return (
-    <div className={`min-h-[108px] bg-card border ${cfg.border} rounded-xl p-2.5 shadow-card flex items-center justify-between`}>
+    <div className={`min-h-[108px] bg-card border ${cfg?.border ?? "border-border"} rounded-xl p-2.5 shadow-card flex items-center justify-between`}>
       <div className="min-w-0 flex-1">
         <span className="text-[9px] font-bold text-text-secondary uppercase tracking-wider block">
           Regime
         </span>
-        <span className={`text-base font-bold font-display block mt-0.5 ${cfg.color}`}>
-          {regime}
+        <span className={`text-base font-bold font-display block mt-0.5 ${cfg?.color ?? "text-text-secondary"}`}>
+          {regime ?? "—"}
         </span>
         <span className="text-[9px] text-text-secondary block leading-tight">
-          {cfg.subtitle}
+          {cfg?.subtitle ?? "Waiting for analysis"}
         </span>
       </div>
 
-      <div className={`p-2 rounded-lg flex-shrink-0 ml-2 ${cfg.bg} ${cfg.color}`}>
-        <Icon className="w-4 h-4" />
-      </div>
+      {cfg && Icon && (
+        <div className={`p-2 rounded-lg flex-shrink-0 ml-2 ${cfg.bg} ${cfg.color}`}>
+          <Icon className="w-4 h-4" />
+        </div>
+      )}
     </div>
   );
 }

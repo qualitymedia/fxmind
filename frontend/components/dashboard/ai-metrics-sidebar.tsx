@@ -81,9 +81,9 @@ function CircularGauge({
 }
 
 export function AIMetricsSidebar({
-  bias = "NEUTRAL",
-  confidence = 0.33,
-  regime = "RANGING",
+  bias,
+  confidence,
+  regime,
   bullProbability,
   bearProbability,
   neutralProbability,
@@ -103,6 +103,8 @@ export function AIMetricsSidebar({
       : bias === "BEARISH"
       ? "text-negative"
       : "text-text-muted";
+  const confidencePercent =
+    confidence !== undefined ? (confidence * 100).toFixed(0) : null;
 
   const statusColor =
     tradeStatus === "ACTIVE"
@@ -131,7 +133,7 @@ export function AIMetricsSidebar({
           MODEL INSIGHT
         </h3>
         <span className={`text-xs font-bold uppercase ${biasColor}`}>
-          {bias}
+          {bias ?? "NO DATA"}
         </span>
       </div>
 
@@ -142,7 +144,7 @@ export function AIMetricsSidebar({
           >
             {tradeStatus === "ACTIVE" ? `${direction ?? ""} ACTIVE` : "NO TRADE"}
           </span>
-          <span className="text-[10px] text-text-muted font-mono">{regime}</span>
+          <span className="text-[10px] text-text-muted font-mono">{regime ?? "—"}</span>
         </div>
 
         {bullProbability != null &&
@@ -242,11 +244,12 @@ export function AIMetricsSidebar({
         )}
 
         {/* Confidence Meter */}
+        {confidence !== undefined && (
         <div>
           <div className="flex justify-between text-[9px] text-text-muted mb-0.5">
             <span className="font-semibold uppercase">Confidence</span>
             <span className="font-bold text-text-primary font-mono">
-              {(confidence * 100).toFixed(0)}%
+              {confidencePercent}%
             </span>
           </div>
           <div className="w-full bg-background rounded-full h-1.5 border border-border overflow-hidden">
@@ -262,6 +265,7 @@ export function AIMetricsSidebar({
             />
           </div>
         </div>
+        )}
       </div>
     </div>
   );

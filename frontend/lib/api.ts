@@ -21,12 +21,14 @@ const API_BASE = getApiBase();
 export async function fetchApi<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const normalized = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const url = API_BASE ? `${API_BASE}${normalized}` : normalized;
+  const headers = new Headers(options?.headers);
+  if (options?.body && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
   const res = await fetch(url, {
     ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options?.headers || {}),
-    },
+    headers,
   });
 
   if (!res.ok) {

@@ -1,10 +1,12 @@
 "use client";
 
-import { TrendingUp, TrendingDown, Minus, Shield } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus } from "lucide-react";
 
 interface AIBiasCardProps {
   bias?: "BULLISH" | "BEARISH" | "NEUTRAL";
   confidence?: number;
+  loading?: boolean;
+  modelUnavailable?: boolean;
 }
 
 const TIER = (c: number) =>
@@ -13,15 +15,23 @@ const TIER = (c: number) =>
   : c >= 0.58 ? { label: "MODERATE", ring: "stroke-amber-400", text: "text-amber-400" }
   : { label: "LOW", ring: "stroke-red-400", text: "text-red-400" };
 
-export function AIBiasCard({ bias = "BULLISH", confidence = 0.68 }: AIBiasCardProps) {
+export function AIBiasCard({
+  bias,
+  confidence,
+  loading = false,
+  modelUnavailable = false,
+}: AIBiasCardProps) {
+  const hasPrediction = bias !== undefined && confidence !== undefined;
   const isBull = bias === "BULLISH";
   const isBear = bias === "BEARISH";
 
   const colorClass = isBull ? "text-positive" : isBear ? "text-negative" : "text-text-secondary";
   const bgLightClass = isBull ? "bg-positive-light" : isBear ? "bg-negative-light" : "bg-background";
   const Icon = isBull ? TrendingUp : isBear ? TrendingDown : Minus;
-  const percent = Math.round(confidence * 100);
-  const tier = TIER(confidence);
+  const percent = confidence !== undefined ? Math.round(confidence * 100) : 0;
+  const tier = confidence !== undefined
+    ? TIER(confidence)
+    : { label: modelUnavailable ? "UNAVAILABLE" : loading ? "LOADING" : "NO DATA", ring: "stroke-border", text: "text-text-secondary" };
 
   // Circular ring math (r=16, circumference=100.5)
   const radius = 16;
@@ -36,14 +46,14 @@ export function AIBiasCard({ bias = "BULLISH", confidence = 0.68 }: AIBiasCardPr
         </span>
         <div className="flex items-center gap-1.5 mt-0.5">
           <span className={`text-base font-bold font-display tracking-tight ${colorClass}`}>
-            {bias}
+            {hasPrediction ? bias : "—"}
           </span>
           <div className={`p-0.5 rounded ${bgLightClass} ${colorClass}`}>
             <Icon className="w-3.5 h-3.5" />
           </div>
         </div>
         <span className={`text-[9px] font-bold mt-1 block ${tier.text}`}>
-          {tier.label}
+          {modelUnavailable ? "MODEL UNAVAILABLE" : tier.label}
         </span>
       </div>
 
@@ -66,9 +76,11 @@ export function AIBiasCard({ bias = "BULLISH", confidence = 0.68 }: AIBiasCardPr
             strokeDasharray={`${dash} ${circ}`}
           />
         </svg>
-        <div className="absolute inset-0 flex items-center justify-center">
-          <span className={`text-[11px] font-bold font-mono ${tier.text}`}>{percent}%</span>
-        </div>
+        {hasPrediction && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className={`text-[11px] font-bold font-mono ${tier.text}`}>{percent}%</span>
+          </div>
+        )}
       </div>
     </div>
   );

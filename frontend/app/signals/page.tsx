@@ -21,8 +21,13 @@ import {
 import { TradeCountdown } from "@/components/dashboard/paper-portfolio-card";
 
 export default function SignalsPage() {
-  const { analysis, signals, tradeHistory, loading, lastRefresh } = useDashboardData("M15");
+  const { analysis, signals, tradeHistory, loading, refreshing, lastRefresh } = useDashboardData("M15");
   const signal = analysis?.signal ?? null;
+  const modelUnavailable = Boolean(
+    signal?.reasons?.some((reason) =>
+      reason.reason.toLowerCase().includes("ai analysis model is unavailable")
+    )
+  );
 
   const [biasFilter, setBiasFilter] = useState<string>("ALL");
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -97,7 +102,11 @@ export default function SignalsPage() {
               </div>
               <span className="text-[11px] text-text-muted flex items-center gap-1 font-mono">
                 <Clock className="w-3.5 h-3.5" />
-                {lastRefresh ? `Evaluated ${lastRefresh.toLocaleTimeString()}` : "Evaluating..."}
+                {refreshing
+                  ? "Updating..."
+                  : lastRefresh
+                  ? `Updated ${lastRefresh.toLocaleTimeString()}`
+                  : "Loading..."}
               </span>
             </div>
 
@@ -116,7 +125,7 @@ export default function SignalsPage() {
                         : "text-text-primary"
                     }`}
                   >
-                    {signal?.bias ?? "NEUTRAL"}
+                    {modelUnavailable ? "UNAVAILABLE" : signal?.bias ?? (loading ? "Loading..." : "—")}
                   </span>
                 </div>
               </div>
@@ -124,14 +133,16 @@ export default function SignalsPage() {
               <div className="bg-background/60 p-3 rounded-lg border border-border">
                 <span className="text-[11px] text-text-secondary block">Calibrated Confidence</span>
                 <span className="text-lg font-bold font-mono text-text-primary block mt-1">
-                  {signal?.confidence != null ? `${(signal.confidence * 100).toFixed(1)}%` : "50.0%"}
+                  {!modelUnavailable && signal?.confidence != null
+                    ? `${(signal.confidence * 100).toFixed(1)}%`
+                    : "—"}
                 </span>
               </div>
 
               <div className="bg-background/60 p-3 rounded-lg border border-border">
                 <span className="text-[11px] text-text-secondary block">Market Regime</span>
                 <span className="text-lg font-bold font-mono text-text-primary block mt-1">
-                  {signal?.regime ?? "RANGING"}
+                  {modelUnavailable ? "—" : signal?.regime ?? (loading ? "Loading..." : "—")}
                 </span>
               </div>
 
@@ -153,6 +164,12 @@ export default function SignalsPage() {
                 </div>
               </div>
             </div>
+
+            {modelUnavailable && (
+              <p className="mt-4 rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
+                The analysis model is unavailable. Confidence and bias probabilities are not being reported.
+              </p>
+            )}
 
             {/* Active Trade Levels */}
             {signal?.trade?.status === "ACTIVE" && (

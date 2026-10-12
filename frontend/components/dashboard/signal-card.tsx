@@ -6,6 +6,7 @@ interface SignalCardProps {
   direction?: "LONG" | "SHORT" | null;
   status?: string;
   strategyType?: string | null;
+  loading?: boolean;
 }
 
 const STRATEGY_LABELS: Record<string, { label: string; color: string }> = {
@@ -16,14 +17,14 @@ const STRATEGY_LABELS: Record<string, { label: string; color: string }> = {
   TRAILING_LIMIT_ENTRY: { label: "Trailing Limit", color: "text-blue-400 bg-blue-500/10 border-blue-500/20" },
 };
 
-export function SignalCard({ direction = "LONG", status = "ACTIVE", strategyType }: SignalCardProps) {
+export function SignalCard({ direction, status = "NO_TRADE", strategyType, loading = false }: SignalCardProps) {
   const isLong = direction === "LONG";
   const isShort = direction === "SHORT";
   const isNoTrade = !direction || status === "NO_TRADE";
   const isActive = status === "ACTIVE";
 
   const Icon = isLong ? ArrowUpRight : isShort ? ArrowDownRight : Slash;
-  const text = isNoTrade ? "NO TRADE" : direction;
+  const text = loading ? "LOADING" : isNoTrade ? "NO TRADE" : direction;
   const colorClass = isLong ? "text-positive" : isShort ? "text-negative" : "text-text-secondary";
 
   const stratInfo = strategyType ? STRATEGY_LABELS[strategyType] : null;
@@ -48,7 +49,7 @@ export function SignalCard({ direction = "LONG", status = "ACTIVE", strategyType
           </span>
         ) : (
           <span className="text-[9px] text-text-secondary block">
-            {isNoTrade ? "Gates" : "Ready"}
+            {loading ? "Fetching analysis" : isNoTrade ? "Gates" : "Ready"}
           </span>
         )}
       </div>
