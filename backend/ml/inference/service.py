@@ -55,6 +55,8 @@ def is_forex_market_closed(dt: datetime) -> bool:
 class InferenceService:
     """Production Inference Service."""
 
+    MIN_TRADE_CONFIDENCE = 0.50
+
     def __init__(self, artifacts_dir: str | Path | None = None):
         self.saver = ModelArtifactSaver(base_dir=artifacts_dir)
         self.regime_detector = RegimeDetector()
@@ -307,7 +309,7 @@ class InferenceService:
                 h1_reason_msg = "Counter-trend SHORT against H1 macro trend (tightened TP/SL target)."
 
         # 8. Signal Gates & Strategy Selection
-        min_confidence = 0.45
+        min_confidence = self.MIN_TRADE_CONFIDENCE
         min_margin = 0.06
 
         # --- Dynamic TP multiplier based on confidence ---

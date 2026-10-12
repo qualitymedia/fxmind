@@ -79,6 +79,11 @@ def test_inference_service_has_regime_aware_ai_logic():
     assert 0.0 <= drift <= 1.0
 
 
+def test_live_trade_confidence_threshold_defaults_to_fifty_percent():
+    """Live trade generation must require at least 50% model confidence."""
+    assert InferenceService.MIN_TRADE_CONFIDENCE == 0.50
+
+
 def test_valid_range_scalp_gate_only_triggers_in_real_ranges():
     """Only allow scalp entries when the market is truly oscillating inside a valid range."""
     service = InferenceService()
