@@ -1,11 +1,13 @@
 /** @type {import('next').NextConfig} */
-if (process.env.NODE_ENV === "production" && !process.env.NEXT_PUBLIC_API_URL) {
-  throw new Error("NEXT_PUBLIC_API_URL must be set for production builds.");
-}
-
 const nextConfig = {
   reactStrictMode: true,
   allowedDevOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+  env: {
+    NEXT_PUBLIC_API_URL:
+      process.env.NEXT_PUBLIC_API_URL || "https://fxmind.onrender.com",
+    NEXT_PUBLIC_WS_URL:
+      process.env.NEXT_PUBLIC_WS_URL || "wss://fxmind.onrender.com",
+  },
   async rewrites() {
     if (process.env.NODE_ENV === "production" || process.env.NEXT_PUBLIC_API_URL) {
       return [];
